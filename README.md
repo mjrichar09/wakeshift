@@ -1,0 +1,84 @@
+# Knuckleball Lab
+
+An interactive 3D lab for low-spin ball flight: the baseball **knuckleball** and the
+volleyball **float serve**. Set the release, the seam orientation, the spin and the air.
+Then watch the flight in slow motion from several cameras, with force arrows, the
+separation ring, surface pressure, schematic streamlines and the wake laid over it.
+The point is to see *why* the ball moves.
+
+Built from `knuckleball-lab-PLAN.md`. The stage, camera rig, style tokens, Vercel setup and
+screenshot harness are adapted from the Bioreactor Lab.
+
+```bash
+npm install
+npm run dev                  # http://localhost:5173
+npm test                     # physics, frames/left-right, cameras, flow overlays, sharing
+npm run build                # static site in dist/
+npm run csv -- baseball quarter out/quarter.csv   # dump a FlightRecord (any sport/preset)
+node scripts/shots.mjs http://localhost:5173/ shots   # Playwright screenshots + behaviour checks
+```
+
+`scripts/shots.mjs` uses Edge on Windows by default. Set `CHROMIUM_PATH` to point it at another
+Chromium build.
+
+## Left and right (read this before touching geometry)
+
+The physics frame **is** the Three.js world frame, so no axes are swapped anywhere:
+
+| Axis | Meaning |
+|---|---|
+| +y | up |
+| +z | direction of flight: pitcher → plate, server → passer |
+| +x | the **catcher's / passer's right**; in baseball, the **first-base side** |
+
+Consequences, each pinned by a test (`tests/physics/frames.test.ts`, `tests/scene/cameras.test.ts`,
+`tests/scene/flow.test.ts`):
+
+- The right-handed batter's box is on the **3B side** (x < 0). A right-handed pitcher releases from x < 0.
+- Catcher, passer, overhead and flow-lab views show +x on the **right** of the screen.
+- Behind the pitcher, behind the server and in the ball chase, +x is on the **left** of the screen.
+  The corner gizmo always shows where 1B (or "R") points.
+- `hAngleDeg`, `lateral` and the HUD's break use + = 1B / passer's right. Wind direction is where
+  the wind blows **to**: 0° = tailwind, 90° = toward +x. Spin tilt is a clock face seen by the
+  catcher: 0° backspin (Magnus up), 90° Magnus toward +x.
+- User-facing text uses `lateralLabel()` in `src/physics/frames.ts` ("toward 1B / 3B") rather than
+  bare "left/right". In-scene text labels carry no arrows, because an arrow would point the wrong way from
+  behind the server.
+- The record's quaternion is `[w, x, y, z]`. `toThreeQuat()` converts it to Three.js order, and a test
+  checks the two rotate vectors identically.
+
+## Model (semi-empirical; see the in-app "About the model")
+
+- `src/physics/`: pure TypeScript, no Three dependency, so the spray worker can use it.
+  - It integrates with fixed-step RK4 at dt = 1 ms. Orientation is analytic, `q(t) = R(ω̂, θ(t))·q0`.
+  - `simulate(params)` returns a `FlightRecord`; playback, charts and overlays only read it.
+- **Separation model** (`aero/separation.ts`): in N_φ azimuthal sectors around ê, a seam can do one of three things.
+  - In the trip zone (35°–75°) it trips that sector, so separation moves back to ≈115°.
+  - Near the laminar line (≈82°) it pins separation at the seam.
+  - Otherwise the sector separates laminar at ≈82°.
+  - Smooth edges keep the forces continuous. Above the critical Re every sector blends to turbulent, and the asymmetry collapses.
+- **Lateral force**: C_S·n̂ = k_S·(1/N)Σ(α_k − ᾱ)u_k, pointing toward the later-separating side.
+  - k_S is calibrated so the peak |C_S| over all static orientations equals C_S,max.
+  - An editable empirical C_S(seam angle) table is available as an alternative mode.
+- **Other forces**:
+  - Drag uses a C_d(Re) drag-crisis curve, shifted by roughness and seam height, and modulated by the mean separation angle.
+  - Magnus uses C_L = k_M·S, soft-capped.
+  - An optional OU wake-noise term runs at the Strouhal shedding frequency.
+- **Air**: ρ comes from temperature, altitude and humidity; μ from Sutherland's law. Wind is a mean plus OU gusts, with optional log-profile shear outdoors.
+
+All magnitudes are tunable starting defaults, exposed in the Aero model folder.
+
+## Acceptance checks (all automated)
+
+| Phase | Check | Where |
+|---|---|---|
+| 1 | ρ = 0 projectile, terminal velocity, energy non-increasing, symmetric → C_S≈0, 180° about ê flips n̂, drag-crisis sweep, determinism and seeds, ½ turn changes C_S sign, ¼ turn non-monotonic | `tests/physics/core.test.ts`, `npm run csv` |
+| 2 | Frame step = 1 ms, 0.05× playback, every camera rendered | `scripts/shots.mjs` |
+| 3–4 | Wake deflects opposite the side force; streamlines leave at the separation ring | `tests/scene/flow.test.ts` |
+| 5 | 50-run spray ≈ 0.5–0.7 s (multi-worker); chart click scrubs; URL hash round-trips | `scripts/shots.mjs`, `tests/scene/share.test.ts` |
+| 6 | The fast serve floats less than the slow one (it starts supercritical, w_Re > 0.7) | `tests/physics/core.test.ts` |
+| 7 | Phone layout with no horizontal overflow, guided tour, About panel | `scripts/shots.mjs` |
+
+## Deploying
+
+`vercel.json` runs the tests, then `npm run build`, and serves `dist/`.
