@@ -27,6 +27,7 @@ export const ARROW_LABELS: Record<ArrowKey, string> = {
 
 class Arrow {
   readonly group = new THREE.Group();
+  length = 0;
   private shaft: THREE.Mesh;
   private head: THREE.Mesh;
   constructor(color: number, private thickness: number) {
@@ -41,6 +42,7 @@ class Arrow {
       return;
     }
     this.group.visible = true;
+    this.length = length;
     const r = this.thickness * unit;
     const headLen = Math.min(length * 0.45, 7 * r);
     const shaftLen = Math.max(length - headLen, 0);
@@ -55,7 +57,7 @@ class Arrow {
 export class ForceArrows {
   readonly group = new THREE.Group();
   private arrows = new Map<ArrowKey, Arrow>();
-  visible: Record<ArrowKey, boolean> = { velocity: true, gravity: false, drag: true, magnus: false, seam: true, wake: false, aero: false };
+  visible: Record<ArrowKey, boolean> = { velocity: false, gravity: false, drag: true, magnus: false, seam: true, wake: false, aero: false };
 
   constructor() {
     for (const k of Object.keys(ARROW_COLORS) as ArrowKey[]) {
@@ -63,6 +65,18 @@ export class ForceArrows {
       this.arrows.set(k, a);
       this.group.add(a.group);
     }
+  }
+
+  /** World-space tips of the visible arrows (for on-screen labels), with |F| in N. */
+  tips(vecs: Record<ArrowKey, THREE.Vector3>): { key: ArrowKey; pos: THREE.Vector3; mag: number }[] {
+    const out: { key: ArrowKey; pos: THREE.Vector3; mag: number }[] = [];
+    for (const [k, a] of this.arrows) {
+      if (!a.group.visible) continue;
+      const dir = vecs[k].clone().normalize();
+      const pos = this.group.position.clone().add(a.group.position).addScaledVector(dir, a.length);
+      out.push({ key: k, pos, mag: vecs[k].length() });
+    }
+    return out;
   }
 
   /**

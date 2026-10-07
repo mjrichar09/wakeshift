@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { BallRig } from "./ballRig";
 import { textSprite } from "./world";
+import { backdropTexture } from "./textures";
 
 /**
  * Default view: a three-quarter view from the upstream, +x quadrant (the catcher's right
@@ -22,7 +23,8 @@ export class FlowLab {
   private labels = new THREE.Group();
 
   constructor(dom: HTMLElement) {
-    this.scene.background = new THREE.Color(0x0f1518);
+    // A dusky wind-tunnel backdrop: deep slate fading to near black at the floor.
+    this.scene.background = backdropTexture("#22303a", "#07090b");
     const key = new THREE.DirectionalLight(0xffffff, 2.4);
     key.position.set(3, 6, 5);
     const rim = new THREE.DirectionalLight(0x9fc7ff, 0.8);
@@ -30,10 +32,6 @@ export class FlowLab {
     this.scene.add(key, rim, new THREE.HemisphereLight(0xe6eef2, 0x2a3034, 0.9));
     this.scene.add(this.rig.group, this.rig.arrowGroup, this.labels);
 
-    // A faint floor grid gives depth without implying a ground.
-    const grid = new THREE.GridHelper(16, 16, 0x2f3b40, 0x1f282c);
-    grid.position.y = -2.6;
-    this.scene.add(grid);
 
     this.camera.position.copy(FLOW_CAMERA.position);
     this.controls = new OrbitControls(this.camera, dom);

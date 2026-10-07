@@ -38,17 +38,24 @@ export function flowAngles(s: FlowSnapshot, x: THREE.Vector3) {
   return { r, a, phi };
 }
 
-const SLOW = new THREE.Color(0x2e64c9);
-const FAST = new THREE.Color(0xe9f6ff);
-const WAKE = new THREE.Color(0x9aa6ad);
+// Air speed relative to the free stream: deep blue (stalled), cyan (free stream), white
+// (1.5 U over the shoulders). Shown as a color bar in the flow lab.
+const SLOW = new THREE.Color(0x1d3f9a);
+const MID = new THREE.Color(0x3fc4e8);
+const FAST = new THREE.Color(0xf2fbff);
+const WAKE = new THREE.Color(0xf0a25a);
+
+export const SPEED_GRADIENT_CSS = "linear-gradient(90deg, #1d3f9a, #3fc4e8 66%, #f2fbff)";
 
 export function speedColor(sp: number, out = new THREE.Color()) {
-  return out.copy(SLOW).lerp(FAST, THREE.MathUtils.clamp(sp / 1.5, 0, 1));
+  const k = THREE.MathUtils.clamp(sp / 1.5, 0, 1);
+  return k < 0.66 ? out.copy(SLOW).lerp(MID, k / 0.66) : out.copy(MID).lerp(FAST, (k - 0.66) / 0.34);
 }
 
 interface Traced {
   pts: THREE.Vector3[];
-  colors: THREE.Color[];
+  /** Flat r, g, b per point. */
+  colors: number[];
   /** Index where the line left the surface (−1 if it never separated). */
   sepAt: number;
 }
@@ -61,7 +68,8 @@ export function traceStreamline(s: FlowSnapshot, seed: THREE.Vector3, shedPhase:
   const x = seed.clone();
   const u = new THREE.Vector3();
   const pts = [x.clone()];
-  const colors = [speedColor(1)];
+  const c = speedColor(1, new THREE.Color());
+  const colors = [c.r, c.g, c.b];
   let sepAt = -1;
   let dir = new THREE.Vector3();
   const ds = 0.05;
@@ -76,7 +84,8 @@ export function traceStreamline(s: FlowSnapshot, seed: THREE.Vector3, shedPhase:
       } else {
         x.addScaledVector(u, ds / Math.max(sp, 0.2));
         pts.push(x.clone());
-        colors.push(speedColor(sp));
+        speedColor(sp, c);
+        colors.push(c.r, c.g, c.b);
       }
     }
     if (sepAt >= 0) {
@@ -87,7 +96,9 @@ export function traceStreamline(s: FlowSnapshot, seed: THREE.Vector3, shedPhase:
       const wob = 0.035 * Math.sin(shedPhase - 2.2 * down) * Math.min(1, Math.max(0, down) / 2);
       x.addScaledVector(dir, ds).addScaledVector(shedDir, wob);
       pts.push(x.clone());
-      colors.push(WAKE.clone().lerp(FAST, 0.25));
+      // Shear layer into the wake: warm, fading with distance downstream.
+      const fadeK = 0.85 * THREE.MathUtils.clamp(1 - Math.max(0, -x.dot(s.e)) / 6, 0.15, 1);
+      colors.push(WAKE.r * fadeK, WAKE.g * fadeK, WAKE.b * fadeK);
     }
     if (-x.dot(s.e) > 6 || x.lengthSq() > 64) break;
   }
@@ -95,9 +106,20 @@ export function traceStreamline(s: FlowSnapshot, seed: THREE.Vector3, shedPhase:
 }
 
 export class Streamlines {
-  readonly material = new LineMaterial({ linewidth: 1.8, vertexColors: true, dashed: true, dashSize: 0.35, gapSize: 0.18, worldUnits: false, transparent: true, opacity: 0.95 });
+  readonly material = new LineMaterial({
+    linewidth: 2.6,
+    vertexColors: true,
+    dashed: true,
+    dashSize: 0.55,
+    gapSize: 0.22,
+    worldUnits: false,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
   readonly line = new LineSegments2(new LineSegmentsGeometry(), this.material);
-  private offsets = [0.1, 0.28, 0.48, 0.7, 0.95, 1.25, 1.65];
+  private offsets = [0.12, 0.34, 0.6, 0.9, 1.3, 1.8];
+  private offsetsPerp = [0.25, 0.7, 1.3];
 
   update(s: FlowSnapshot, shedPhase: number) {
     const m = s.seamDir.lengthSq() > 0 ? s.seamDir.clone() : s.e1.clone();
@@ -105,21 +127,21 @@ export class Streamlines {
     const pos: number[] = [];
     const col: number[] = [];
     const seed = new THREE.Vector3();
-    for (const [plane, weight] of [
-      [m, 1],
-      [m2, 0.55],
+    for (const [plane, weight, offs] of [
+      [m, 1, this.offsets],
+      [m2, 0.45, this.offsetsPerp],
     ] as const) {
       for (const sign of [-1, 1])
-        for (const rho of this.offsets) {
+        for (const rho of offs) {
           seed.copy(s.e).multiplyScalar(4).addScaledVector(plane, sign * rho);
           const tr = traceStreamline(s, seed, shedPhase + sign * 1.3);
           for (let i = 0; i + 1 < tr.pts.length; i++) {
             const a = tr.pts[i];
             const b = tr.pts[i + 1];
             pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
-            const ca = tr.colors[i].clone().multiplyScalar(weight);
-            const cb = tr.colors[i + 1].clone().multiplyScalar(weight);
-            col.push(ca.r, ca.g, ca.b, cb.r, cb.g, cb.b);
+            const k = 3 * i;
+            const cs = tr.colors;
+            col.push(cs[k] * weight, cs[k + 1] * weight, cs[k + 2] * weight, cs[k + 3] * weight, cs[k + 4] * weight, cs[k + 5] * weight);
           }
         }
     }

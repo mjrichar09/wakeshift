@@ -32,12 +32,15 @@ export class Wake {
       depthWrite: false,
       uniforms: { size: { value: size }, focal: { value: 800 }, color: { value: new THREE.Color(0xdfe7ea) } },
       // size is in ball radii; modelMatrix[0][0] is the group's (uniform) scale.
+      // Puffs grow as they age (alpha falls from 1 to 0), so the wake reads as soft smoke.
       vertexShader: `attribute float alpha; varying float vA; uniform float size; uniform float focal;
         void main() { vA = alpha; vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = max(1.5, size * modelMatrix[0][0] * focal / -mv.z); gl_Position = projectionMatrix * mv; }`,
+          float grow = 0.7 + 1.8 * (1.0 - alpha);
+          gl_PointSize = max(1.5, grow * size * modelMatrix[0][0] * focal / -mv.z); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `varying float vA; uniform vec3 color;
         void main() { vec2 d = gl_PointCoord - 0.5; float r = dot(d, d); if (r > 0.25) discard;
-          gl_FragColor = vec4(color, vA * (1.0 - r * 4.0) * 0.55); }`,
+          float soft = 1.0 - smoothstep(0.0, 0.25, r);
+          gl_FragColor = vec4(color, vA * soft * 0.32); }`,
     });
     this.points = new THREE.Points(g, mat);
     this.points.frustumCulled = false;

@@ -14,8 +14,11 @@ export class SeparationRing {
   readonly material = new LineMaterial({ linewidth: 5, vertexColors: true, worldUnits: false, depthTest: true });
   /** Faint second pass through the ball, so the far side of the ring still reads. */
   readonly ghostMaterial = new LineMaterial({ linewidth: 3, vertexColors: true, worldUnits: false, depthTest: false, transparent: true, opacity: 0.28 });
+  readonly glowMaterial = new LineMaterial({ linewidth: 16, vertexColors: true, worldUnits: false, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
   private line: Line2;
   private behind: Line2;
+  private glow: Line2;
+  private glowEnabled = true;
   private band: THREE.Mesh;
   private bandRange = [0, 0];
 
@@ -24,16 +27,24 @@ export class SeparationRing {
     this.line.renderOrder = 3;
     this.behind = new Line2(new LineGeometry(), this.ghostMaterial);
     this.behind.renderOrder = 2;
+    this.glow = new Line2(new LineGeometry(), this.glowMaterial);
+    this.glow.renderOrder = 4;
     this.band = new THREE.Mesh(
       new THREE.SphereGeometry(1.008, 64, 8, 0, Math.PI * 2, 0.6, 0.7),
       new THREE.MeshBasicMaterial({ color: 0xf08a24, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }),
     );
-    this.group.add(this.behind, this.line, this.band);
+    this.group.add(this.behind, this.line, this.glow, this.band);
   }
 
   setResolution(w: number, h: number) {
     this.material.resolution.set(w, h);
     this.ghostMaterial.resolution.set(w, h);
+    this.glowMaterial.resolution.set(w, h);
+  }
+
+  /** The glow is for close-ups (flow lab, picture-in-picture); in the field it swamps the ball. */
+  setGlow(on: boolean) {
+    this.glowEnabled = on;
   }
 
   setTripZone(minRad: number, maxRad: number) {
@@ -46,6 +57,7 @@ export class SeparationRing {
   update(s: FlowSnapshot, showRing: boolean, showBand: boolean) {
     this.line.visible = showRing;
     this.behind.visible = showRing;
+    this.glow.visible = showRing && this.glowEnabled;
     this.band.visible = showBand;
     if (showBand) this.band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), s.e);
     if (!showRing) return;
@@ -71,5 +83,6 @@ export class SeparationRing {
     this.line.geometry.dispose();
     this.line.geometry = g;
     this.behind.geometry = g;
+    this.glow.geometry = g;
   }
 }

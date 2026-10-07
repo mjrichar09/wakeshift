@@ -17,12 +17,10 @@
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
     "three": "^0.186.1",
-    "tweakpane": "^4.0.5",
     "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@tweakpane/core": "^2.0.5",
     "@types/node": "^26.6.4",
     "@types/three": "^0.186.0",
     "eslint": "^10.12.0",

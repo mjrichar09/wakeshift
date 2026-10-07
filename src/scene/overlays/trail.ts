@@ -29,6 +29,7 @@ const STRIDE = 4; // samples per vertex (1 vertex every 4 ms)
 export class Trails {
   readonly group = new THREE.Group();
   private main: Line2 | null = null;
+  private glow: Line2 | null = null;
   private ghost: Line2 | null = null;
   private pins: Line2[] = [];
   private materials: LineMaterial[] = [];
@@ -52,6 +53,7 @@ export class Trails {
 
   setRecords(rec: FlightRecord, ghost: FlightRecord, aLatScale: number) {
     this.clearLine(this.main);
+    this.clearLine(this.glow);
     this.clearLine(this.ghost);
     const pts = this.positions(rec);
     const colors: number[] = [];
@@ -64,18 +66,23 @@ export class Trails {
     const g = new LineGeometry();
     g.setPositions(pts);
     g.setColors(colors);
-    this.main = new Line2(g, this.mat({ linewidth: 3.5, vertexColors: true }));
+    this.main = new Line2(g, this.mat({ linewidth: 4, vertexColors: true }));
     this.main.computeLineDistances();
+    this.main.renderOrder = 2;
+    this.glow = new Line2(g, this.mat({ linewidth: 14, vertexColors: true, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.glow.renderOrder = 1;
+    this.group.add(this.glow);
     this.mainCount = pts.length / 3;
     this.group.add(this.main);
 
     const gg = new LineGeometry();
     gg.setPositions(this.positions(ghost));
-    this.ghost = new Line2(gg, this.mat({ linewidth: 2, color: 0xffffff, transparent: true, opacity: 0.6, dashed: true, dashSize: 0.18, gapSize: 0.12 }));
+    this.ghost = new Line2(gg, this.mat({ linewidth: 2.2, color: 0xffffff, transparent: true, opacity: 0.7, dashed: true, dashSize: 0.22, gapSize: 0.14 }));
     this.ghost.computeLineDistances();
     this.ghost.visible = this.ghostVisible;
     this.group.add(this.ghost);
     this.main.visible = this.trailVisible;
+    this.glow.visible = this.trailVisible && this.glowOn;
   }
 
   setPins(recs: { rec: FlightRecord; color: number }[]) {
@@ -101,7 +108,15 @@ export class Trails {
     this.trailVisible = trail;
     this.ghostVisible = ghost;
     if (this.main) this.main.visible = trail;
+    if (this.glow) this.glow.visible = trail && this.glowOn;
     if (this.ghost) this.ghost.visible = ghost;
+  }
+
+  private glowOn = true;
+  /** The additive glow is the most fill-hungry part of the tracer: off in low quality. */
+  setGlow(on: boolean) {
+    this.glowOn = on;
+    if (this.glow) this.glow.visible = on && this.trailVisible;
   }
 
   setResolution(w: number, h: number) {
@@ -111,7 +126,7 @@ export class Trails {
   private clearLine(l: Line2 | null) {
     if (!l) return;
     this.group.remove(l);
-    l.geometry.dispose();
+    if (l !== this.glow) l.geometry.dispose(); // the glow shares the trail's geometry
     const m = l.material as LineMaterial;
     m.dispose();
     this.materials = this.materials.filter((x) => x !== m);

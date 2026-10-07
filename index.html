@@ -15,31 +15,49 @@
       <header class="masthead">
         <div class="brand">
           <h1>Knuckleball Lab</h1>
-          <p class="brand__sub">
-            <span class="seg seg--sport" role="radiogroup" aria-label="Sport">
-              <button type="button" role="radio" data-sport="baseball" aria-checked="true">Baseball</button>
-              <button type="button" role="radio" data-sport="volleyball" aria-checked="false">Volleyball</button>
-            </span>
-            <span id="preset-name">1/4 turn</span>
-            <span id="outcome"></span>
-            <button type="button" class="linkish" id="about-open">About the model</button>
-            <button type="button" class="linkish" id="tour-open">Guided tour</button>
-          </p>
+          <p class="brand__tag">Why a ball with almost no spin dances</p>
         </div>
-        <nav class="views" id="views" aria-label="Camera"></nav>
+        <div class="seg seg--sport" role="radiogroup" aria-label="Sport">
+          <button type="button" role="radio" data-sport="baseball" aria-checked="true">Baseball</button>
+          <button type="button" role="radio" data-sport="volleyball" aria-checked="false">Volleyball</button>
+        </div>
+        <div class="masthead__links">
+          <button type="button" class="pill" id="tour-open"><span id="ic-tour"></span>Guided tour</button>
+          <button type="button" class="pill" id="about-open"><span id="ic-info"></span>About the model</button>
+          <button type="button" class="pill pill--icon" id="keys-open" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)"><span id="ic-keys"></span></button>
+        </div>
       </header>
+
+      <nav class="presets" id="presets" aria-label="Presets"></nav>
+      <nav class="views" id="views" aria-label="Camera"></nav>
 
       <main class="stage" id="stage">
         <canvas id="scene" aria-label="3D view of the ball flight"></canvas>
-        <div class="hud" id="hud" aria-live="off"></div>
-        <canvas class="gizmo" id="gizmo" width="120" height="120" aria-hidden="true"></canvas>
+        <div class="vignette" aria-hidden="true"></div>
+        <div class="labels" id="labels" aria-hidden="true"></div>
+        <div class="hud" id="hud"></div>
+        <canvas class="gizmo" id="gizmo" aria-hidden="true"></canvas>
+        <div class="chips" id="chips" role="group" aria-label="Show in the scene"></div>
+        <figure class="pip" id="pip">
+          <figcaption><span>Close-up · forces on the ball</span><button type="button" class="icon-btn" id="pip-close" aria-label="Hide close-up"></button></figcaption>
+          <div class="pip__view" id="pip-view"></div>
+        </figure>
+        <figure class="flow-legend" id="flow-legend" hidden>
+          <figcaption>Air speed past the ball</figcaption>
+          <div class="flow-legend__bar" id="flow-bar"></div>
+          <div class="flow-legend__ticks"><span>stalled</span><span>free stream</span><span>1.5×</span></div>
+          <p class="flow-legend__ring"><i style="background: var(--sep-lam)"></i>laminar · lets go early<br /><i style="background: var(--sep-turb)"></i>tripped by a seam · clings longer<br /><i style="background: var(--sep-pin)"></i>pinned at a seam</p>
+        </figure>
+        <p class="schematic" id="schematic" hidden>Schematic flow, not CFD</p>
         <div class="split-label split-label--left" id="split-left" hidden></div>
         <div class="split-label split-label--right" id="split-right" hidden>Flow lab</div>
-        <p class="schematic" id="schematic" hidden>Schematic flow, not CFD · potential flow upstream, illustrative wake</p>
-        <figure class="legend" id="legend" hidden></figure>
+        <div class="caption" id="caption" aria-live="polite">
+          <span class="caption__tag" id="caption-tag"></span>
+          <span class="caption__text" id="caption-text"></span>
+        </div>
         <figure class="spray" id="spray" hidden>
-          <figcaption><span id="spray-title">Spray</span><button type="button" class="linkish" id="spray-close" aria-label="Close spray view">×</button></figcaption>
-          <canvas id="spray-canvas" width="260" height="260"></canvas>
+          <figcaption><span id="spray-title">Spray</span><button type="button" class="icon-btn" id="spray-close" aria-label="Close spray view"></button></figcaption>
+          <canvas id="spray-canvas"></canvas>
           <p class="spray__note" id="spray-note"></p>
         </figure>
         <div class="tour" id="tour" hidden>
@@ -49,31 +67,41 @@
           <div class="tour__nav">
             <button type="button" class="btn btn--quiet" id="tour-back">Back</button>
             <button type="button" class="btn" id="tour-next">Next</button>
-            <button type="button" class="linkish" id="tour-close">Close</button>
+            <button type="button" class="linkish" id="tour-close">Skip tour</button>
           </div>
         </div>
         <div class="fade" id="fade"></div>
       </main>
 
       <section class="playbar" id="playbar" aria-label="Playback">
-        <button type="button" class="pb-btn" id="pb-play" aria-keyshortcuts="Space" title="Play / pause (space)">▶</button>
-        <button type="button" class="pb-btn" id="pb-back" aria-keyshortcuts="ArrowLeft" title="Step back 1 ms (←)">⏮</button>
-        <button type="button" class="pb-btn" id="pb-fwd" aria-keyshortcuts="ArrowRight" title="Step forward 1 ms (→)">⏭</button>
-        <button type="button" class="pb-btn" id="pb-replay" title="Replay from release">↺</button>
-        <input type="range" class="pb-scrub" id="pb-scrub" min="0" max="1000" value="0" step="1" aria-label="Timeline" />
+        <div class="pb-buttons">
+          <button type="button" class="pb-btn pb-btn--main" id="pb-play" aria-keyshortcuts="Space" title="Play / pause (space)"></button>
+          <button type="button" class="pb-btn" id="pb-back" aria-keyshortcuts="ArrowLeft" title="Back 1 ms (←)"></button>
+          <button type="button" class="pb-btn" id="pb-fwd" aria-keyshortcuts="ArrowRight" title="Forward 1 ms (→)"></button>
+          <button type="button" class="pb-btn" id="pb-replay" title="Replay from release (R)"></button>
+        </div>
+        <div class="timeline">
+          <input type="range" class="pb-scrub" id="pb-scrub" min="0" max="1000" value="0" step="1" aria-label="Timeline" />
+          <div class="timeline__marks" id="pb-marks"></div>
+        </div>
         <span class="pb-time" id="pb-time">0 ms</span>
         <span class="seg seg--speed" id="pb-speeds" role="radiogroup" aria-label="Playback speed"></span>
-        <label class="pb-free" title="Free speed">
-          <input type="range" id="pb-free" min="-2" max="0" step="0.01" value="-1" aria-label="Free speed (log scale)" />
-        </label>
-        <label class="pb-check"><input type="checkbox" id="pb-loop" checked /> Loop</label>
-        <label class="pb-check" title="Slow down when the side force is large"><input type="checkbox" id="pb-auto" /> Auto-slow</label>
+        <div class="pb-more">
+          <button type="button" class="pb-btn" id="pb-more" aria-haspopup="true" aria-expanded="false" title="More playback options"></button>
+          <div class="popover" id="pb-popover" hidden>
+            <p class="popover__label">All speeds</p>
+            <span class="seg seg--speed" id="pb-speeds-all" role="radiogroup" aria-label="All playback speeds"></span>
+            <label class="popover__row">Custom <input type="range" id="pb-free" min="-2" max="0" step="0.01" value="-0.6" aria-label="Custom speed (log scale)" /> <span id="pb-free-v"></span></label>
+            <label class="popover__row"><input type="checkbox" id="pb-loop" checked /> Loop the flight</label>
+            <label class="popover__row"><input type="checkbox" id="pb-auto" /> Slow down when the push is strong</label>
+          </div>
+        </div>
       </section>
 
       <section class="drawer" id="drawer" aria-label="Charts">
         <header class="drawer__head">
           <button type="button" class="linkish" id="drawer-toggle" aria-expanded="true">Charts ▾</button>
-          <span class="drawer__hint">Click a chart to scrub · pinned runs: <span id="pins"></span></span>
+          <span class="drawer__hint">Pinned runs: <span id="pins"></span></span>
         </header>
         <div class="charts" id="charts"></div>
       </section>
@@ -84,6 +112,19 @@
     <dialog class="about" id="about">
       <form method="dialog"><button class="about__close" aria-label="Close">×</button></form>
       <div id="about-body"></div>
+    </dialog>
+    <dialog class="about about--keys" id="keys">
+      <form method="dialog"><button class="about__close" aria-label="Close">×</button></form>
+      <h2>Keyboard</h2>
+      <dl class="keys">
+        <dt><kbd>Space</kbd></dt><dd>Play / pause</dd>
+        <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Step 1 ms back / forward</dd>
+        <dt><kbd>R</kbd></dt><dd>Replay from release</dd>
+        <dt><kbd>1</kbd>–<kbd>9</kbd></dt><dd>Cameras</dd>
+        <dt><kbd>P</kbd></dt><dd>Pin this run for comparison</dd>
+        <dt><kbd>C</kbd></dt><dd>Toggle the close-up</dd>
+        <dt><kbd>?</kbd></dt><dd>This list</dd>
+      </dl>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

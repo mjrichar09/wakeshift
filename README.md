@@ -9,6 +9,22 @@ The point is to see *why* the ball moves.
 Built from `knuckleball-lab-PLAN.md`. The stage, camera rig, style tokens, Vercel setup and
 screenshot harness are adapted from the Bioreactor Lab.
 
+## Using it
+
+- **Presets** (the "Try" row) load a scenario; its explanation plays in the caption bar.
+- **Cameras** (keys 1–9): fixed views you can orbit once they arrive; **Ball cam** follows the
+  ball and lets you orbit and zoom around it while it flies; **Flow lab** holds the ball still
+  and streams the air past.
+- **Close-up** (bottom-left, key `C`): a picture-in-picture of the ball with labelled forces.
+- **Chips** on the right of the scene toggle overlays; the **caption** narrates what the air is
+  doing at the playhead; dots on the **timeline** mark the peak push, push reversals and
+  drag-crisis crossings.
+- **Cards** on the right hold every control, with Basic and Advanced tabs. The spin-axis clock is
+  drawn as the catcher sees it and the wind compass from above with the pitcher at the top, so
+  1B is on the right of both (tested against the physics).
+- **Graphics: Auto** drops to a lighter mode (no shadows or image lighting, pixel ratio 1, no
+  glow) if the frame rate stays under ~30 fps; force it with High/Low in the Display card.
+
 ```bash
 npm install
 npm run dev                  # http://localhost:5173
@@ -35,8 +51,9 @@ Consequences, each pinned by a test (`tests/physics/frames.test.ts`, `tests/scen
 `tests/scene/flow.test.ts`):
 
 - The right-handed batter's box is on the **3B side** (x < 0). A right-handed pitcher releases from x < 0.
-- Catcher, passer, overhead and flow-lab views show +x on the **right** of the screen.
-- Behind the pitcher, behind the server and in the ball chase, +x is on the **left** of the screen.
+- Catcher, passer, overhead, flow-lab and close-up views show +x on the **right** of the screen.
+- Behind the pitcher, behind the server and in the ball cam's starting pose, +x is on the
+  **left** of the screen.
   The corner gizmo always shows where 1B (or "R") points.
 - `hAngleDeg`, `lateral` and the HUD's break use + = 1B / passer's right. Wind direction is where
   the wind blows **to**: 0° = tailwind, 90° = toward +x. Spin tilt is a clock face seen by the
@@ -75,9 +92,10 @@ All magnitudes are tunable starting defaults, exposed in the Aero model folder.
 | 1 | ρ = 0 projectile, terminal velocity, energy non-increasing, symmetric → C_S≈0, 180° about ê flips n̂, drag-crisis sweep, determinism and seeds, ½ turn changes C_S sign, ¼ turn non-monotonic | `tests/physics/core.test.ts`, `npm run csv` |
 | 2 | Frame step = 1 ms, 0.05× playback, every camera rendered | `scripts/shots.mjs` |
 | 3–4 | Wake deflects opposite the side force; streamlines leave at the separation ring | `tests/scene/flow.test.ts` |
-| 5 | 50-run spray ≈ 0.5–0.7 s (multi-worker); chart click scrubs; URL hash round-trips | `scripts/shots.mjs`, `tests/scene/share.test.ts` |
+| 5 | 50-run spray ≈ 1 s (multi-worker; rendering pauses while it runs); chart click scrubs; URL hash round-trips | `scripts/shots.mjs`, `tests/scene/share.test.ts` |
 | 6 | The fast serve floats less than the slow one (it starts supercritical, w_Re > 0.7) | `tests/physics/core.test.ts` |
-| 7 | Phone layout with no horizontal overflow, guided tour, About panel | `scripts/shots.mjs` |
+| 7 | Phone layout with no horizontal overflow, guided tour (auto-starts on a first visit), About panel | `scripts/shots.mjs` |
+| UX | Ball cam keeps its orbit target on the ball and keeps the user's orbit offset; close-up shows labelled forces; dials match the Magnus and wind vectors; captions name the right side | `scripts/shots.mjs`, `tests/scene/dials.test.ts`, `tests/scene/story.test.ts` |
 
 ## Deploying
 

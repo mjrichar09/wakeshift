@@ -30,7 +30,7 @@ export interface OverlayFlags {
 }
 
 export const defaultOverlays = (): OverlayFlags => ({
-  arrows: { velocity: true, gravity: false, drag: true, magnus: false, seam: true, wake: false, aero: false },
+  arrows: { velocity: false, gravity: false, drag: true, magnus: false, seam: true, wake: false, aero: false },
   arrowScale: 1,
   ring: true,
   tripBand: false,
@@ -59,10 +59,12 @@ export class BallRig {
   private ballMesh: THREE.Group | null = null;
   private ballKey = "";
   private shedPhase = 0;
+  private streamTick = 0;
   private staticKey = "";
 
   constructor(full: boolean) {
-    this.wake = new Wake(full ? 700 : 260, full ? 0.09 : 0.14);
+    this.wake = new Wake(full ? 700 : 260, full ? 0.11 : 0.14);
+    this.ring.setGlow(full);
     this.streamlines = full ? new Streamlines() : null;
     this.smoke = full ? new Smoke() : null;
     this.group.add(this.spin, this.ring.group, this.pressure.mesh, this.wake.points);
@@ -120,7 +122,7 @@ export class BallRig {
     if (this.streamlines) {
       this.streamlines.line.visible = f.streamlines;
       if (f.streamlines) {
-        if (flowChanged || f.flowAnimation) this.streamlines.update(s, this.shedPhase);
+        if (flowChanged || (f.flowAnimation && ++this.streamTick % 3 === 0)) this.streamlines.update(s, this.shedPhase);
         this.streamlines.animate(animDt, flowSpeed * 0.6);
       }
     }
