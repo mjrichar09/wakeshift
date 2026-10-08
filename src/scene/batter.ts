@@ -145,7 +145,8 @@ export interface SwingingBatter extends THREE.Group {
 function batGeometry() {
   // Knob, thin handle, long taper, barrel, rounded end: revolved about +y (knob at 0).
   const r = (y: number, x: number) => new THREE.Vector2(x, y * BAT_LEN);
-  const prof = [r(0, 0), r(0, 0.021), r(0.018, 0.021), r(0.03, 0.012), r(0.32, 0.0125), r(0.55, 0.024), r(0.72, 0.033), r(0.97, 0.033), r(0.99, 0.028), r(1, 0)];
+  // About a third fuller than a regulation bat, to sit right with the stylized figure.
+  const prof = [r(0, 0), r(0, 0.028), r(0.02, 0.028), r(0.035, 0.017), r(0.3, 0.0175), r(0.55, 0.032), r(0.72, 0.044), r(0.965, 0.044), r(0.99, 0.037), r(1, 0)];
   const g = new THREE.LatheGeometry(prof, 24);
   g.computeVertexNormals();
   return g;
