@@ -39,7 +39,11 @@ async function open(width, height, scheme = "dark", hash = "", firstVisit = fals
 {
   const f = await open(1440, 900, "dark", "", true);
   await f.waitForTimeout(1200);
-  const toured = await f.waitForFunction(() => !document.getElementById("tour").hidden, null, { timeout: 5000 }).then(() => true, () => false);
+  let toured = false;
+  for (let k = 0; k < 20 && !toured; k++) {
+    toured = await f.evaluate(() => !document.getElementById("tour").hidden);
+    if (!toured) await f.waitForTimeout(250);
+  }
   check("first visit opens the guided tour", toured);
   await f.waitForTimeout(5000);
   console.log("INFO  auto graphics after probing:", await f.evaluate(() => document.getElementById("caption-text").textContent.includes("Low") ? "switched to Low (slow software GL)" : "stayed High"));
@@ -203,6 +207,45 @@ await p.evaluate(() => window.lab.loadPreset("baseball", "curveball"));
 await p.evaluate(() => window.lab.setView("pitcher"));
 await at(0.3);
 await shot(p, `${out}/curveball-pitcher.png`);
+
+// Batting game: a perfect swing barrels it; a take is judged ball/strike; the lab comes back.
+await p.click("#game-open");
+await p.waitForTimeout(800);
+await shot(p, `${out}/game-intro.png`);
+await p.click('[data-diff="easy"]');
+await p.click('[data-g="start"]');
+await p.waitForFunction(() => window.lab.game.state === "pitching" && window.lab.playback.t > 0.15, null, { timeout: 8000, polling: 16 });
+// This harness renders slowly: hold the pitch while aiming, then let it fly on.
+await p.evaluate(() => (window.lab.playback.playing = false));
+await shot(p, `${out}/game-pitch.png`);
+const aim = await p.evaluate(() => {
+  const r = window.lab.rec;
+  const i = r.n - 1;
+  const v = new (window.lab.camera.position.constructor)(r.r[3 * i], r.r[3 * i + 1], 0).project(window.lab.camera);
+  const c = document.getElementById("scene").getBoundingClientRect();
+  return { x: c.left + ((v.x + 1) / 2) * c.width, y: c.top + ((1 - v.y) / 2) * c.height };
+});
+await p.mouse.click(aim.x, aim.y);
+await p.evaluate(() => (window.lab.playback.playing = true));
+await p.waitForFunction(() => window.lab.game.state === "result", null, { timeout: 15000, polling: 100 });
+const v1 = await p.evaluate(() => document.querySelector('[data-g="verdict"]').textContent);
+check("game: a swing at the true crossing point barrels it", v1 === "Barrelled it!", v1);
+await shot(p, `${out}/game-result.png`);
+await p.keyboard.press("Space");
+await p.waitForFunction(() => window.lab.game.state === "result", null, { timeout: 15000, polling: 100 });
+const v2 = await p.evaluate(() => document.querySelector('[data-g="verdict"]').textContent);
+check("game: no swing is judged ball or strike", v2 === "Good eye: ball" || v2 === "Called strike", v2);
+for (let k = 0; k < 8; k++) {
+  await p.keyboard.press("Space");
+  await p.waitForFunction(() => window.lab.game.state === "result", null, { timeout: 15000, polling: 100 });
+}
+await p.keyboard.press("Space");
+await p.waitForFunction(() => window.lab.game.state === "summary", null, { timeout: 8000, polling: 100 });
+await shot(p, `${out}/game-summary.png`);
+await p.keyboard.press("Escape");
+await p.waitForTimeout(500);
+const back = await p.evaluate(() => ({ game: document.getElementById("app").classList.contains("is-game"), trail: window.lab.overlays.trail, panel: getComputedStyle(document.getElementById("panel")).display }));
+check("game: Esc returns to the lab with overlays restored", !back.game && back.trail && back.panel !== "none", JSON.stringify(back));
 
 // Volleyball.
 for (const id of ["fast", "slow"]) {

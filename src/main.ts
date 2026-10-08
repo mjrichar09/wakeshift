@@ -43,6 +43,7 @@ import type { SprayResult } from "./workers/spray.worker";
 import { ABOUT_HTML, Tour } from "./ui/about";
 import { ICONS } from "./ui/icons";
 import { tip } from "./ui/tip";
+import { BattingGame } from "./game/controller";
 import { CHIP_TIPS } from "./ui/tips";
 
 inject();
@@ -71,6 +72,7 @@ const icon = (id: string, name: keyof typeof ICONS) => ($(id).innerHTML = ICONS[
 icon("ic-tour", "tour");
 icon("ic-info", "info");
 icon("ic-keys", "keyboard");
+icon("ic-bat", "bat");
 icon("pb-back", "stepBack");
 icon("pb-fwd", "stepFwd");
 icon("pb-replay", "replay");
@@ -107,6 +109,8 @@ interface Pin {
   label: string;
 }
 let pins: Pin[] = [];
+/** True while the batting game runs: no pinned paths or other give-aways are drawn. */
+let gameActive = false;
 const playback = new Playback();
 if (narrow) {
   // Phones: a reduced overlay set.
@@ -132,7 +136,9 @@ const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 1500);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.maxPolarAngle = Math.PI * 0.495;
+// Allow looking slightly upward (low cameras look up at the pitch); the camera itself is kept
+// above the ground in the frame loop instead.
+controls.maxPolarAngle = Math.PI * 0.62;
 const camRig = new CameraRig(camera, controls);
 const flowLab = new FlowLab(canvas);
 const mainRig = new BallRig(false);
@@ -192,7 +198,7 @@ canvas.addEventListener(
     const right = e.clientX - r.left > r.width / 2;
     const flowActive = display.split ? right : view.kind === "flowlab";
     flowLab.controls.enabled = flowActive;
-    controls.enabled = !flowActive && !camRig.moving;
+    controls.enabled = !flowActive && !camRig.moving && !game.active;
   },
   { capture: true },
 );
@@ -210,7 +216,7 @@ function resim() {
   playback.setDuration(rec.t[rec.n - 1]);
   playback.autoSlowThreshold = 0.6 * aLatMax;
   trails.setRecords(rec, ghost, aLatMax);
-  trails.setPins(pins.map((p) => ({ rec: p.rec, color: p.color })));
+  trails.setPins(gameActive ? [] : pins.map((p) => ({ rec: p.rec, color: p.color })));
   mainRig.setBall(params);
   flowLab.rig.setBall(params);
   for (const r of [mainRig, flowLab.rig]) r.setTripZone(params.aero.tripMinDeg * deg, params.aero.tripMaxDeg * deg);
@@ -677,6 +683,7 @@ function renderMarks() {
 }
 
 window.addEventListener("keydown", (e: KeyboardEvent) => {
+  if (game.key(e)) return;
   const t = e.target as HTMLElement;
   if (t.closest("input, textarea, select, [contenteditable]") && !(t as HTMLInputElement).type?.match(/range|checkbox/)) return;
   if (e.key === " ") {
@@ -857,15 +864,17 @@ function frame() {
     if (flowVisible) flowLab.controls.update();
   }
 
+  game.update();
   trails.setProgress(iN);
   trails.setVisibility(overlays.trail, overlays.ghost);
-  markers.setReveal(THREE.MathUtils.smoothstep(playback.t / rec.t[rec.n - 1], 0.82, 0.98));
+  markers.setReveal(game.active ? 0 : THREE.MathUtils.smoothstep(playback.t / rec.t[rec.n - 1], 0.82, 0.98));
   if (world.strikeZone) world.strikeZone.visible = overlays.strikeZone;
   world.figures.visible = overlays.figures;
   for (const f of world.figures.children) f.visible = !(view.hide ?? []).includes(f.name);
 
   camRig.update(dt);
   if (!camRig.moving && controls.enabled) controls.update();
+  if (camera.position.y < 0.25) camera.position.y = 0.25;
 
   // Readout, caption, gizmo, timeline, charts.
   if (iN !== hudI) {
@@ -965,6 +974,70 @@ function probeFrameRate(now: number) {
   }
 }
 
+// ---------------------------------------------------------------- batting game
+let saved: { params: Params; presetId: string; overlays: typeof overlays; showArrows: boolean; pip: boolean; split: boolean; loop: boolean; speed: number } | null = null;
+const game = new BattingGame({
+  stage,
+  canvas,
+  camera,
+  scene: world.scene,
+  enter() {
+    saved = { params: structuredClone(params), presetId, overlays: structuredClone(overlays), showArrows, pip: display.pip, split: display.split, loop: playback.loop, speed: playback.speed };
+    if (params.sport !== "baseball") loadParams(presetParams("baseball", "quarter"), "quarter");
+    gameActive = true;
+    trails.setPins([]);
+    sprayDots.visible = false;
+    $("spray").hidden = true;
+    tour.close();
+    Object.assign(overlays, { trail: false, ghost: false, ring: false, wake: false, tripBand: false, pressure: false, smoke: false, strikeZone: true, figures: true });
+    showArrows = false;
+    display.pip = false;
+    display.split = false;
+    $("app").classList.add("is-game");
+    setView("catcher");
+    playback.playing = false;
+    resize();
+    updateViewChrome();
+  },
+  exit() {
+    gameActive = false;
+    $("app").classList.remove("is-game");
+    if (saved) {
+      Object.assign(overlays, saved.overlays);
+      showArrows = saved.showArrows;
+      display.pip = saved.pip;
+      display.split = saved.split;
+      playback.loop = saved.loop;
+      playback.speed = saved.speed;
+      syncSpeed();
+      loadParams(saved.params, saved.presetId);
+    }
+    saved = null;
+    resize();
+    updateViewChrome();
+  },
+  load(p) {
+    params = p;
+    presetId = "custom";
+    resim();
+    playback.playing = false;
+    playback.scrub(0);
+    return rec;
+  },
+  play(speed) {
+    playback.speed = speed;
+    playback.loop = false;
+    playback.replay();
+  },
+  t: () => playback.t,
+  duration: () => playback.duration,
+  reveal(on) {
+    overlays.trail = on;
+  },
+  ghostOf: (p) => simulateGhost(p),
+});
+$("game-open").addEventListener("click", () => game.enter());
+
 // ---------------------------------------------------------------- start
 const gizmoEl = $<HTMLCanvasElement>("gizmo");
 const pbTime = $("pb-time");
@@ -1026,6 +1099,7 @@ Object.assign(window as unknown as Record<string, unknown>, {
     setShowArrows: (v: boolean) => (showArrows = v),
     setQuality: (q: "high" | "low") => applyQuality(q),
     setPaused: (v: boolean) => (renderPaused = v),
+    game,
     plusX: () => plusXName(params.sport),
   },
 });

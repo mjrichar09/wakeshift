@@ -16,6 +16,11 @@ screenshot harness are adapted from the Bioreactor Lab.
   curveball, changeup, splitter). Volleyball: float serves, conditions, and spin serves (jump
   and standing topspin, sidespin, a beach sky ball). Release angles of the spin pitches and
   serves were solved with the simulator so they arrive in the zone / land in the court.
+- **Batting game** (masthead button): catcher view, a random pitch (half knuckleballs with a
+  random seam orientation, half spin pitches with location jitter) and no tracer. Click where it
+  will cross the plate before it gets there: within 1.5 in barrels it, 3 in is solid contact,
+  5 in a foul tip; laying off a ball scores too. Ten pitches a round at 0.35×, 0.6× or real time.
+  The click is cast onto the plate plane from the camera, so guesses are measured in real inches.
 - **Hover** any overlay chip, preset or the small "i" next to a setting for an explanation (with a
   color key where it applies).
 - **Cameras** (keys 1–9): fixed views you can orbit once they arrive; **Ball cam** follows the

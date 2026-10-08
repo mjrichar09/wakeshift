@@ -22,6 +22,7 @@
           <button type="button" role="radio" data-sport="volleyball" aria-checked="false">Volleyball</button>
         </div>
         <div class="masthead__links">
+          <button type="button" class="pill pill--game" id="game-open" title="Batting game: read the pitch and click where it crosses the plate"><span id="ic-bat"></span>Batting game</button>
           <button type="button" class="pill" id="tour-open"><span id="ic-tour"></span>Guided tour</button>
           <button type="button" class="pill" id="about-open"><span id="ic-info"></span>About the model</button>
           <button type="button" class="pill pill--icon" id="keys-open" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)"><span id="ic-keys"></span></button>
@@ -69,6 +70,40 @@
             <button type="button" class="btn" id="tour-next">Next</button>
             <button type="button" class="linkish" id="tour-close">Skip tour</button>
           </div>
+        </div>
+        <div class="game" id="game" hidden>
+          <header class="game__bar">
+            <span class="game__count" data-g="count"></span>
+            <span class="game__stat">Score <b data-g="score">0</b></span>
+            <span class="game__stat">Streak <b data-g="streak">0</b></span>
+            <button type="button" class="btn btn--quiet game__quit" data-g="quit">Quit game</button>
+          </header>
+          <p class="game__flash" data-g="flash" hidden></p>
+          <section class="game__card game__intro" data-g="intro">
+            <p class="game__eyebrow">Batting game</p>
+            <h2>Read the pitch</h2>
+            <p>You're behind the plate. A random pitch is coming: a knuckleball that could dance anywhere, or a fastball, slider, curve… There's no tracer. <b>Click where you think it will cross the plate, before it gets there.</b> Within 1.5 in is a barrel, 3 in solid contact, 5 in a foul tip. Lay off pitches outside the zone for points too.</p>
+            <div class="seg game__diff" role="radiogroup" aria-label="Difficulty">
+              <button type="button" role="radio" data-diff="easy">Easy · 0.35×</button>
+              <button type="button" role="radio" data-diff="medium">Medium · 0.6×</button>
+              <button type="button" role="radio" data-diff="hard">Real time</button>
+            </div>
+            <div class="game__actions"><button type="button" class="btn" data-g="start">Play ball</button><span class="game__hint">Space to start · Esc to quit</span></div>
+          </section>
+          <section class="game__card game__result" data-g="result" hidden>
+            <p class="game__verdict" data-g="verdict"></p>
+            <p class="game__points" data-g="points"></p>
+            <p class="game__pitch" data-g="pitch"></p>
+            <p class="game__swing" data-g="swing"></p>
+            <p class="game__legend"><i class="dot dot--guess"></i>your swing <i class="dot dot--ball"></i>the ball</p>
+            <div class="game__actions"><button type="button" class="btn" data-g="next">Next pitch</button><span class="game__hint">Space</span></div>
+          </section>
+          <section class="game__card game__summary" data-g="summary" hidden>
+            <p class="game__eyebrow">Round over</p>
+            <h2>Score <span data-g="final"></span></h2>
+            <p data-g="finalNote"></p>
+            <div class="game__actions"><button type="button" class="btn" data-g="again">Play again</button><button type="button" class="btn btn--quiet" data-g="quit2">Back to the lab</button></div>
+          </section>
         </div>
         <div class="fade" id="fade"></div>
       </main>

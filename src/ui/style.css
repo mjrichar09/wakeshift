@@ -446,6 +446,59 @@ kbd { font: 500 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(-
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; }
 .keys dd { margin: 0; color: var(--ink-2); }
 
+/* ------------------------------------------------------------ batting game */
+.pill--game { color: var(--accent); border-color: var(--accent); }
+.pill--game:hover { color: var(--accent); background: var(--accent-soft); }
+/* The game takes the whole window: only the stage stays. */
+.app.is-game { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "presets" "views" "stage" "playbar" "drawer"; }
+.app.is-game .presets, .app.is-game .views, .app.is-game .playbar, .app.is-game .drawer, .app.is-game .panel,
+.app.is-game .hud, .app.is-game .chips, .app.is-game .caption, .app.is-game .pip, .app.is-game .gizmo,
+.app.is-game .masthead__links, .app.is-game .seg--sport { display: none !important; }
+.app.is-game .stage { margin: 0 14px 14px; }
+.app.is-game #scene { cursor: crosshair; }
+.game { position: absolute; inset: 0; pointer-events: none; }
+.game > * { pointer-events: auto; }
+.game__bar {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 18px; padding: 6px 8px 6px 16px; border-radius: 999px;
+  background: rgba(10, 14, 17, 0.8); color: #e8eff1; border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(8px);
+  font: 600 13px var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+}
+.game__stat b { font: 600 17px var(--font-mono); color: var(--f-seam); margin-left: 6px; }
+.game__quit { padding: 4px 10px; font-size: 12px; color: #e8eff1; border-color: rgba(255, 255, 255, 0.3); }
+.game__flash {
+  position: absolute; left: 50%; top: 64px; transform: translateX(-50%); margin: 0; pointer-events: none;
+  padding: 6px 16px; border-radius: 8px; background: rgba(10, 14, 17, 0.7); color: #fff;
+  font: 700 20px var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.game__flash.is-on { animation: flash-in 0.25s var(--ease); }
+@keyframes flash-in { from { opacity: 0; transform: translate(-50%, -6px) scale(0.96); } }
+.game__card {
+  position: absolute; right: 12px; bottom: 12px; width: min(400px, calc(100% - 24px)); padding: 16px 18px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  animation: rise 0.3s var(--ease);
+}
+.game__intro, .game__summary { left: 50%; right: auto; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: min(460px, calc(100% - 24px)); animation: none; }
+.game__card h2 { margin: 4px 0 8px; font: 700 26px/1.05 var(--font-display); }
+.game__card p { margin: 0 0 8px; font-size: 14px; color: var(--ink-2); }
+.game__card p b { color: var(--ink); }
+.game__eyebrow { font: 600 11px var(--font-mono) !important; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent) !important; }
+.game__diff { margin: 6px 0 4px; }
+.game__actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.game__hint { font: 500 11.5px var(--font-mono); color: var(--muted); }
+.game__verdict { margin: 0 !important; font: 700 26px/1.05 var(--font-display) !important; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink) !important; }
+.game__verdict--barrel, .game__verdict--solid { color: var(--good) !important; }
+.game__verdict--foul { color: var(--warn) !important; }
+.game__verdict--miss, .game__verdict--chase, .game__verdict--calledStrike { color: var(--crit) !important; }
+.game__verdict--goodTake { color: var(--chart-b) !important; }
+.game__points { font: 600 20px var(--font-mono) !important; color: var(--accent) !important; margin: 2px 0 8px !important; }
+.game__pitch { color: var(--ink) !important; font-weight: 500; }
+.game__legend { font-size: 12px !important; display: flex; align-items: center; gap: 6px; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+.dot--guess { border: 2.5px solid #4fd1ff; margin-right: 2px; }
+.dot--ball { background: #f08a24; margin-left: 8px; margin-right: 2px; }
+#game[hidden] { display: none !important; }
+
 /* ------------------------------------------------------------ responsive */
 @media (max-width: 1240px) {
   .app { grid-template-columns: minmax(0, 1fr) 320px; }
@@ -494,4 +547,8 @@ kbd { font: 500 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(-
   .playbar, .drawer { padding-left: 8px; padding-right: 8px; }
   .panel { border-left: 0; overflow: visible; background: transparent; }
   .split-label--left { left: 12px; }
+  .app.is-game { grid-template-rows: auto 80vh; }
+  .app.is-game .stage { margin: 0 8px 8px; }
+  .game__bar { gap: 10px; padding-left: 10px; font-size: 11.5px; }
+  .game__card h2 { font-size: 22px; }
 }

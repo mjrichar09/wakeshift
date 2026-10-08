@@ -13,5 +13,6 @@ export const ICONS = {
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/>'),
   keyboard: svg('<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'),
+  bat: svg('<path d="M14.5 3.5l6 6-9.5 9.5-3.2.7-2.5 2.3-1.3-1.3 2.3-2.5.7-3.2z"/><circle cx="5" cy="6" r="2"/>'),
   tour: svg('<path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>'),
 };

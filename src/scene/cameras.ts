@@ -28,7 +28,9 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const pose = (p: THREE.Vector3, t: THREE.Vector3, fov: number): Pose => ({ position: p, target: t, fov });
 
 export const BASEBALL_VIEWS: ViewDef[] = [
-  { id: "catcher", label: "Catcher", kind: "fixed", hide: ["catcher"], pose: pose(v(0, 0.95, 1.25), v(0, 1.15, -16), 26) },
+  // Just behind and above the crouched catcher (hidden here), looking out at the pitcher with
+  // the strike zone and plate in the foreground, like the broadcast angle.
+  { id: "catcher", label: "Catcher", kind: "fixed", hide: ["catcher"], pose: pose(v(0, 1.22, 2.7), v(0, 0.75, -12), 38) },
   // Right-handed batter stands in the 3B-side box (x < 0); left-handed on the 1B side.
   { id: "batterR", label: "Batter RHH", kind: "fixed", hide: ["batter"], pose: pose(v(-0.95, 1.62, 0.22), v(-0.25, 1.35, -16), 42) },
   { id: "batterL", label: "Batter LHH", kind: "fixed", hide: ["batter"], pose: pose(v(0.95, 1.62, 0.22), v(0.25, 1.35, -16), 42) },
