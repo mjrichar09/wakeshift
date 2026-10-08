@@ -2,6 +2,18 @@
 // controls, toggles, selects, buttons and two dials. Every control reads its value through
 // `get` and writes through `set`, and `refresh()` re-reads after outside changes.
 
+import type { TipContent } from "./tip";
+import { infoButton } from "./tip";
+
+/** Explanatory tooltip for a control: plain text (titled with the label) or full content. */
+export type Tip = string | TipContent;
+
+function info(label: string, t?: Tip): HTMLElement[] {
+  if (!t) return [];
+  const content = typeof t === "string" ? { title: label, body: t } : t;
+  return [infoButton(content, `About ${label}`)];
+}
+
 export interface Control {
   el: HTMLElement;
   refresh(): void;
@@ -28,6 +40,7 @@ export interface SliderOpts {
   digits?: number;
   /** Small text under the slider, re-read on refresh (e.g. "0.25 turns to the plate"). */
   hint?: () => string;
+  tip?: Tip;
 }
 
 export function slider(o: SliderOpts): Control {
@@ -36,6 +49,8 @@ export function slider(o: SliderOpts): Control {
   const head = h("div", "ctl__head");
   const label = h("label", "ctl__label", o.label);
   label.htmlFor = sid;
+  const labelBox = h("span", "ctl__labelbox");
+  labelBox.append(label, ...info(o.label, o.tip));
   const valWrap = h("span", "ctl__value");
   const num = h("input");
   num.type = "number";
@@ -45,7 +60,7 @@ export function slider(o: SliderOpts): Control {
   num.setAttribute("aria-label", `${o.label} value`);
   valWrap.append(num);
   if (o.unit) valWrap.append(h("span", "ctl__unit", o.unit));
-  head.append(label, valWrap);
+  head.append(labelBox, valWrap);
   const range = h("input", "ctl__range");
   range.type = "range";
   range.id = sid;
@@ -82,11 +97,16 @@ export interface SegOpts<T extends string | number> {
   options: { value: T; label: string; title?: string }[];
   get: () => T;
   set: (v: T) => void;
+  tip?: Tip;
 }
 
 export function seg<T extends string | number>(o: SegOpts<T>): Control {
   const row = h("div", "ctl ctl--seg");
-  if (o.label) row.append(h("span", "ctl__label", o.label));
+  if (o.label) {
+    const lb = h("span", "ctl__labelbox");
+    lb.append(h("span", "ctl__label", o.label), ...info(o.label, o.tip));
+    row.append(lb);
+  }
   const group = h("div", "seg");
   group.setAttribute("role", "radiogroup");
   if (o.label) group.setAttribute("aria-label", o.label);
@@ -108,14 +128,14 @@ export function seg<T extends string | number>(o: SegOpts<T>): Control {
   return { el: row, refresh: paint };
 }
 
-export function toggle(o: { label: string; get: () => boolean; set: (v: boolean) => void; hint?: string }): Control {
+export function toggle(o: { label: string; get: () => boolean; set: (v: boolean) => void; hint?: string; tip?: Tip }): Control {
   const row = h("label", "ctl ctl--toggle");
   const input = h("input");
   input.type = "checkbox";
   const track = h("span", "toggle__track");
   track.setAttribute("aria-hidden", "true");
   const text = h("span", "ctl__label", o.label + (o.hint ? ` <small>${o.hint}</small>` : ""));
-  row.append(input, track, text);
+  row.append(input, track, text, ...info(o.label, o.tip));
   input.addEventListener("change", () => o.set(input.checked));
   const paint = () => (input.checked = o.get());
   paint();
@@ -151,10 +171,12 @@ export function button(label: string, onClick: () => void, variant: "" | "quiet"
   return b;
 }
 
-export function readout(label: string, get: () => string): Control {
+export function readout(label: string, get: () => string, t?: Tip): Control {
   const row = h("div", "ctl ctl--readout");
   const v = h("span", "ctl__readout");
-  row.append(h("span", "ctl__label", label), v);
+  const lb = h("span", "ctl__labelbox");
+  lb.append(h("span", "ctl__label", label), ...info(label, t));
+  row.append(lb, v);
   const paint = () => (v.textContent = get());
   paint();
   return { el: row, refresh: paint };
@@ -196,6 +218,7 @@ export interface DialOpts {
   format: (deg: number) => string;
   /** Snap step while dragging, degrees. */
   step?: number;
+  tip?: Tip;
 }
 
 export function dial(o: DialOpts): Control {
@@ -222,7 +245,9 @@ export function dial(o: DialOpts): Control {
   const tip = face.querySelector(".dial__tip") as SVGCircleElement;
   const val = h("span", "ctl__readout");
   const head = h("div", "ctl__head");
-  head.append(h("span", "ctl__label", o.label), val);
+  const lb = h("span", "ctl__labelbox");
+  lb.append(h("span", "ctl__label", o.label), ...info(o.label, o.tip));
+  head.append(lb, val);
   row.append(head, face);
   const paint = () => {
     const d = o.get();

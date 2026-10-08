@@ -53,6 +53,17 @@ export function caption(rec: FlightRecord, ghost: FlightRecord, i: number, units
   const fx = rec.fSeam[3 * i];
   const fy = rec.fSeam[3 * i + 1];
   const cs = rec.cs[i];
+  // Ordinary spin pitches and serves: the Magnus force dominates the seams.
+  const mx = rec.fMagnus[3 * i];
+  const my = rec.fMagnus[3 * i + 1];
+  const mag = Math.hypot(mx, my, rec.fMagnus[3 * i + 2]);
+  if (mag > 1.5 * Math.hypot(fx, fy) && rec.cl[i] > 0.05) {
+    const rpm = Math.round(rec.params.spin.revPerSec * 60);
+    return {
+      tag: "Magnus",
+      text: `Spinning at ${rpm} rpm, the ball drags the air around with it and the wake is thrown the other way: the Magnus force pushes it ${directionWords(mx, my, sport)} (${mag.toFixed(2)} N). The seams' push averages out over ${f2(rec.rotations[n - 1])} turns.`,
+    };
+  }
   if (cs < 0.2 * csMax) return { tag: "Balanced", text: `The ${sport === "baseball" ? "seams" : "panel edges"} sit symmetrically right now: almost no side push (C_S ${f2(cs)}).` };
   // Swinging: compare the push direction with 25 ms ago.
   const j = Math.max(0, i - 25);
@@ -88,10 +99,12 @@ export function landmarks(rec: FlightRecord): Landmark[] {
     }
   }
   if (peak > 1e-6) out.push({ t: rec.t[pi], label: "Peak push", kind: "peak" });
-  // Reversals of the horizontal push, with hysteresis at 15 % of the peak.
+  // Reversals of the horizontal push, with hysteresis at 15 % of the peak. Only for
+  // low-spin flights: with many turns the push flips every half turn and means little.
   const hy = 0.15 * peak;
   let sign = 0;
-  for (let i = 0; i < rec.n; i++) {
+  const lowSpin = rec.rotations[rec.n - 1] <= 3;
+  for (let i = 0; lowSpin && i < rec.n; i++) {
     const fx = rec.fSeam[3 * i];
     const s = fx > hy ? 1 : fx < -hy ? -1 : 0;
     if (s !== 0 && sign !== 0 && s !== sign) out.push({ t: rec.t[i], label: "Push flips side", kind: "flip" });

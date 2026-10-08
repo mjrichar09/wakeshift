@@ -6,7 +6,9 @@ import { defaultEmpiricalTable } from "../physics/params";
 import type { ArrowKey } from "../scene/overlays/forceArrows";
 import { ARROW_LABELS } from "../scene/overlays/forceArrows";
 import type { Control } from "./kit";
-import { button, card, dial, note, readout, seg, slider, toggle } from "./kit";
+import { button, card, note } from "./kit";
+import * as kit from "./kit";
+import { controlTip } from "./tips";
 import type { UnitSystem } from "./units";
 import { fromLen, fromSmall, fromSpeed, fromTemp, lenUnit, smallUnit, speedUnit, tempUnit, toLen, toSmall, toSpeed, toTemp } from "./units";
 import type { SprayOptions } from "./spray";
@@ -33,6 +35,12 @@ export interface CardsHost {
   display: Display;
   spray: SprayOptions;
   readouts: { rotations: string; rho: string; reCrit: string };
+  /**
+   * The orientation preview canvas. It is created once and re-attached on every rebuild:
+   * each new canvas would need a new WebGL context, and browsers kill the oldest context
+   * (the main 3D view) after about 16.
+   */
+  previewCanvas: HTMLCanvasElement;
   changed(kind: "params" | "display"): void;
   setUnits(u: UnitSystem): void;
   setTheme(t: Theme): void;
@@ -46,6 +54,13 @@ export interface CardsHost {
 }
 
 const r1 = (x: number) => Math.round(x * 10) / 10;
+
+// Kit controls with their explanation attached from the tips table (matched by label).
+const slider = (o: Parameters<typeof kit.slider>[0]) => kit.slider({ tip: controlTip(o.label), ...o });
+const seg = <T extends string | number>(o: kit.SegOpts<T>) => kit.seg<T>({ tip: o.label ? controlTip(o.label) : undefined, ...o });
+const toggle = (o: Parameters<typeof kit.toggle>[0]) => kit.toggle({ tip: controlTip(o.label), ...o });
+const dial = (o: kit.DialOpts) => kit.dial({ tip: controlTip(o.label), ...o });
+const readout = (label: string, get: () => string) => kit.readout(label, get, controlTip(label));
 
 export function buildCards(container: HTMLElement, host: CardsHost) {
   container.innerHTML = "";
@@ -108,9 +123,7 @@ export function buildCards(container: HTMLElement, host: CardsHost) {
   });
 
   // ---- Orientation
-  const preview = document.createElement("canvas");
-  preview.className = "preview";
-  preview.id = "orientation-preview";
+  const preview = host.previewCanvas;
   preview.title = bb ? "The ball at release, seen from the plate: the face the air meets" : "The ball at contact, seen from the passer";
   const grips = bb
     ? [

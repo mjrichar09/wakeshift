@@ -46,7 +46,7 @@ export class Charts {
     private onScrub: (t: number) => void,
   ) {
     host.innerHTML = `<div class="chart-tabs" role="tablist">
-        <button type="button" role="tab" data-chart="side">Side force</button>
+        <button type="button" role="tab" data-chart="side">Side forces</button>
         <button type="button" role="tab" data-chart="seam">Seam angle</button>
         <button type="button" role="tab" data-chart="re">Re &amp; drag</button>
         <button type="button" role="tab" data-chart="gap">Break vs ghost</button>
@@ -185,17 +185,32 @@ export class Charts {
     if (id === "side") {
       const fx = col((i) => rec.fSeam[3 * i]);
       const fy = col((i) => rec.fSeam[3 * i + 1]);
+      // Spin pitches: the Magnus force is what moves them, so plot it too (purple).
+      let peakSeam = 0;
+      let peakMag = 0;
+      for (let i = 0; i < rec.n; i++) {
+        peakSeam = Math.max(peakSeam, Math.hypot(rec.fSeam[3 * i], rec.fSeam[3 * i + 1]));
+        peakMag = Math.max(peakMag, Math.hypot(rec.fMagnus[3 * i], rec.fMagnus[3 * i + 1]));
+      }
+      const withMagnus = peakMag > 0.5 * peakSeam && peakMag > 0.05;
+      const mx = col((i) => rec.fMagnus[3 * i]);
+      const my = col((i) => rec.fMagnus[3 * i + 1]);
+      const purple = "#9b6be0";
       return {
-        data: [t, fx, fy],
+        data: withMagnus ? [t, fx, fy, mx, my] : [t, fx, fy],
         series: [
-          { stroke: colA, width: 2.5, fill: `${colA}22` },
+          { stroke: colA, width: 2.5, fill: withMagnus ? undefined : `${colA}22` },
           { stroke: colB, width: 2 },
+          ...(withMagnus ? [{ stroke: purple, width: 2.5 }, { stroke: purple, width: 2, dash: [6, 4] }] : []),
         ],
         axes: [{ values: (_u, v) => v.map((x) => `${x.toFixed(2)} N`) }],
         scales: {},
         plugins: [zero],
-        note: `orange: sideways (+ toward ${side}) · blue: vertical (+ up)`,
-        read: (k) => `${ms(k)} · sideways ${fx[k].toFixed(3)} N · vertical ${fy[k].toFixed(3)} N`,
+        note: withMagnus
+          ? `seam force: orange sideways (+ ${side}), blue vertical · Magnus: purple sideways, dashed vertical (+ up)`
+          : `orange: sideways (+ toward ${side}) · blue: vertical (+ up)`,
+        read: (k) =>
+          `${ms(k)} · seam ${fx[k].toFixed(3)} / ${fy[k].toFixed(3)} N` + (withMagnus ? ` · Magnus ${mx[k].toFixed(2)} / ${my[k].toFixed(2)} N` : ""),
       };
     }
     if (id === "seam") {

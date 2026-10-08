@@ -41,6 +41,16 @@ describe("caption", () => {
   });
 });
 
+describe("magnus caption", () => {
+  it("credits the Magnus force for spin pitches", () => {
+    const p = presetParams("baseball", "curveball");
+    const r = simulate(p);
+    const c = caption(r, simulateGhost(p), 100, "imperial");
+    expect(c.tag).toBe("Magnus");
+    expect(c.text).toContain("down");
+  });
+});
+
 describe("landmarks", () => {
   it("marks a peak and, for 1/2 turn, a flip of the push", () => {
     const rec = simulate(presetParams("baseball", "half"));
@@ -48,6 +58,10 @@ describe("landmarks", () => {
     expect(lm.filter((l) => l.kind === "peak")).toHaveLength(1);
     expect(lm.some((l) => l.kind === "flip")).toBe(true);
     for (let k = 1; k < lm.length; k++) expect(lm[k].t).toBeGreaterThanOrEqual(lm[k - 1].t);
+  });
+
+  it("skips push reversals for high-spin pitches", () => {
+    expect(landmarks(simulate(presetParams("baseball", "curveball"))).some((l) => l.kind === "flip")).toBe(false);
   });
 
   it("marks the fast serve dropping into the drag crisis", () => {

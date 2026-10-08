@@ -215,12 +215,42 @@ describe("float serve", () => {
   });
 
   it("lands every volleyball preset in the court", () => {
-    for (const id of ["still", "hvac", "fast", "slow"]) {
+    for (const id of ["still", "hvac", "beach", "fast", "slow", "jumpTopspin", "standingTopspin", "sidespin", "skyBall"]) {
       const { r } = maxDev(id);
       expect(r.outcome).toBe("floor");
       const z = r.r[3 * (r.n - 1) + 2];
       expect(z).toBeGreaterThan(0);
       expect(z).toBeLessThan(9);
+      expect(Math.abs(r.r[3 * (r.n - 1)])).toBeLessThan(4.5);
     }
+  });
+});
+
+describe("other pitches", () => {
+  it("brings every spin pitch to the plate near the strike zone", () => {
+    for (const id of ["fourSeam", "sinker", "cutter", "slider", "curveball", "changeup", "splitter"]) {
+      const r = simulate(presetParams("baseball", id));
+      const end = at3(r.r, r.n - 1);
+      expect(r.outcome, id).toBe("plate");
+      expect(Math.abs(end[0]), id).toBeLessThan(0.3);
+      expect(end[1], id).toBeGreaterThan(0.35);
+      expect(end[1], id).toBeLessThan(1.15);
+    }
+  });
+
+  it("orders the movement the way the pitches are known for", () => {
+    // Vertical Magnus: four-seam lifts most, curveball pushes down.
+    const lift = (id: string) => {
+      const r = simulate(presetParams("baseball", id));
+      return r.fMagnus[3 * 50 + 1];
+    };
+    expect(lift("fourSeam")).toBeGreaterThan(0.4);
+    expect(lift("curveball")).toBeLessThan(-0.3);
+    // Horizontal: sinker and changeup run toward 3B (arm side of a right-hander), slider and cutter toward 1B.
+    const side = (id: string) => simulate(presetParams("baseball", id)).fMagnus[3 * 50];
+    expect(side("sinker")).toBeLessThan(0);
+    expect(side("changeup")).toBeLessThan(0);
+    expect(side("slider")).toBeGreaterThan(0);
+    expect(side("cutter")).toBeGreaterThan(0);
   });
 });

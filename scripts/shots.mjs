@@ -39,7 +39,8 @@ async function open(width, height, scheme = "dark", hash = "", firstVisit = fals
 {
   const f = await open(1440, 900, "dark", "", true);
   await f.waitForTimeout(1200);
-  check("first visit opens the guided tour", await f.evaluate(() => !document.getElementById("tour").hidden));
+  const toured = await f.waitForFunction(() => !document.getElementById("tour").hidden, null, { timeout: 5000 }).then(() => true, () => false);
+  check("first visit opens the guided tour", toured);
   await f.waitForTimeout(5000);
   console.log("INFO  auto graphics after probing:", await f.evaluate(() => document.getElementById("caption-text").textContent.includes("Low") ? "switched to Low (slow software GL)" : "stayed High"));
   await f.screenshot({ path: `${out}/first-visit.png` });
@@ -155,14 +156,53 @@ check("URL hash restores params", before === (await p2.evaluate(() => JSON.strin
 await p2.context().close();
 await p.evaluate(() => window.lab.setPaused(false));
 
-// Guided tour.
+// Guided tour: the card must never cover the ball.
 await p.click("#tour-open");
+let covered = 0;
 for (let i = 0; i < 5; i++) {
   await p.waitForTimeout(1400);
+  for (let k = 0; k < 4; k++) {
+    const hit = await p.evaluate(() => {
+      const s = document.getElementById("stage").getBoundingClientRect();
+      const t = document.getElementById("tour").getBoundingClientRect();
+      const b = window.lab.ballOnScreen();
+      const x = s.left + b.x;
+      const y = s.top + b.y;
+      return x > t.left - 10 && x < t.right + 10 && y > t.top - 10 && y < t.bottom + 10;
+    });
+    if (hit) covered++;
+    await p.waitForTimeout(250);
+  }
   await shot(p, `${out}/tour-${i + 1}.png`);
   await p.click("#tour-next");
 }
+check("tour card never covers the ball", covered === 0, `${covered} of 20 samples covered`);
 check("tour closes after the last step", await p.evaluate(() => document.getElementById("tour").hidden));
+
+// Tooltips: hovering a chip shows its explanation with a key; an advanced control's "i" too.
+await p.hover('[data-chip="ring"]');
+await p.waitForTimeout(200);
+const chipTip = await p.evaluate(() => { const t = document.getElementById("tip"); return t && !t.hidden ? t.textContent : ""; });
+check("chip tooltip with a key", /Separation/.test(chipTip) && /Laminar/.test(chipTip), chipTip.slice(0, 60));
+await shot(p, `${out}/tip-chip.png`);
+await p.locator(".card").first().getByRole("tab", { name: "Advanced" }).click();
+await p.locator(".card").first().locator(".card__body:not([hidden]) .info").first().hover();
+await p.waitForTimeout(200);
+const ctlTip = await p.evaluate(() => { const t = document.getElementById("tip"); return t && !t.hidden ? t.textContent : ""; });
+check("advanced-setting tooltip", ctlTip.length > 40, ctlTip.slice(0, 60));
+await shot(p, `${out}/tip-advanced.png`);
+await p.mouse.move(5, 5);
+
+// Regression: many preset changes must not exhaust WebGL contexts (blank stage).
+for (let i = 0; i < 24; i++) {
+  await p.locator(".preset").nth(i % 6).click();
+  await p.waitForTimeout(100);
+}
+check("main 3D view survives 24 preset changes", !(await p.evaluate(() => document.getElementById("scene").getContext("webgl2")?.isContextLost())));
+await p.evaluate(() => window.lab.loadPreset("baseball", "curveball"));
+await p.evaluate(() => window.lab.setView("pitcher"));
+await at(0.3);
+await shot(p, `${out}/curveball-pitcher.png`);
 
 // Volleyball.
 for (const id of ["fast", "slow"]) {

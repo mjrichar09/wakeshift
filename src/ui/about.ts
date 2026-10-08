@@ -61,10 +61,12 @@ export class Tour {
   }
   start() {
     this.el.hidden = false;
+    this.el.closest(".stage")?.classList.add("is-touring");
     this.go(0);
   }
   close() {
     this.el.hidden = true;
+    this.el.closest(".stage")?.classList.remove("is-touring");
   }
   get open() {
     return !this.el.hidden;

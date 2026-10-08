@@ -11,7 +11,13 @@ screenshot harness are adapted from the Bioreactor Lab.
 
 ## Using it
 
-- **Presets** (the "Try" row) load a scenario; its explanation plays in the caption bar.
+- **Presets** load a scenario; its explanation plays in the caption bar. Baseball: the
+  knuckleball family, conditions, and ordinary pitches (four-seam, sinker, cutter, slider,
+  curveball, changeup, splitter). Volleyball: float serves, conditions, and spin serves (jump
+  and standing topspin, sidespin, a beach sky ball). Release angles of the spin pitches and
+  serves were solved with the simulator so they arrive in the zone / land in the court.
+- **Hover** any overlay chip, preset or the small "i" next to a setting for an explanation (with a
+  color key where it applies).
 - **Cameras** (keys 1–9): fixed views you can orbit once they arrive; **Ball cam** follows the
   ball and lets you orbit and zoom around it while it flies; **Flow lab** holds the ball still
   and streams the air past.

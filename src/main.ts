@@ -42,6 +42,8 @@ import type { SprayOptions } from "./ui/spray";
 import type { SprayResult } from "./workers/spray.worker";
 import { ABOUT_HTML, Tour } from "./ui/about";
 import { ICONS } from "./ui/icons";
+import { tip } from "./ui/tip";
+import { CHIP_TIPS } from "./ui/tips";
 
 inject();
 
@@ -179,6 +181,9 @@ function resize() {
 }
 new ResizeObserver(resize).observe(stage);
 
+// If the browser ever drops the 3D context, say so (three.js restores it when it can).
+canvas.addEventListener("webglcontextlost", () => flash("The browser reset the 3D graphics. If the view stays blank, reload the page."));
+
 // Orbit controls share the canvas: enable the one under the pointer.
 canvas.addEventListener(
   "pointerdown",
@@ -194,6 +199,9 @@ canvas.addEventListener(
 
 // ---------------------------------------------------------------- simulation
 const readouts = { rotations: "", rho: "", reCrit: "" };
+const previewCanvas = document.createElement("canvas");
+previewCanvas.className = "preview";
+previewCanvas.id = "orientation-preview";
 
 function resim() {
   rec = simulate(params);
@@ -239,16 +247,23 @@ function queueResim() {
 // ---------------------------------------------------------------- presets strip
 function renderPresets() {
   const nav = $("presets");
-  nav.innerHTML =
-    presetsFor(params.sport)
-      .map(
-        (p) =>
-          `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === presetId}" title="${p.blurb}">${p.label}</button>`,
-      )
-      .join("") + (presetId === "custom" ? `<span class="preset preset--custom">Custom</span>` : "");
-  nav.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((b) =>
-    b.addEventListener("click", () => loadParams(presetParams(params.sport, b.dataset.preset!), b.dataset.preset!)),
-  );
+  const list = presetsFor(params.sport);
+  let html = "";
+  let group = "";
+  for (const p of list) {
+    if (p.group !== group) {
+      group = p.group;
+      html += `<span class="preset-group">${group}</span>`;
+    }
+    html += `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === presetId}">${p.label}</button>`;
+  }
+  if (presetId === "custom") html += `<span class="preset preset--custom">Custom</span>`;
+  nav.innerHTML = html;
+  nav.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((b) => {
+    const p = list.find((x) => x.id === b.dataset.preset)!;
+    b.addEventListener("click", () => loadParams(presetParams(params.sport, p.id), p.id));
+    tip(b, { title: p.label, body: p.blurb });
+  });
 }
 
 // ---------------------------------------------------------------- cards
@@ -258,6 +273,7 @@ const host: CardsHost = {
   display,
   spray,
   readouts,
+  previewCanvas,
   changed(kind) {
     if (kind === "params") {
       presetId = "custom";
@@ -335,7 +351,8 @@ function flash(msg: string, tag = "Note") {
 
 // ---------------------------------------------------------------- orientation preview
 const preview = (() => {
-  const r = new THREE.WebGLRenderer({ canvas: cards.preview, antialias: true, alpha: true });
+  // One renderer for the life of the page (see CardsHost.previewCanvas).
+  const r = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true, alpha: true });
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445055, 1.6));
   const key = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -352,11 +369,7 @@ const preview = (() => {
 })();
 
 function renderPreview() {
-  const cv = cards.preview;
-  if (preview.r.domElement !== cv) {
-    preview.r.dispose();
-    preview.r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
-  }
+  const cv = previewCanvas;
   const w = cv.clientWidth || 280;
   const h = cv.clientHeight || 160;
   preview.r.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -455,13 +468,15 @@ function renderChips() {
         `<button type="button" class="chip-btn${c.flowOnly && !flowShown ? " is-dim" : ""}" data-chip="${c.key}" aria-pressed="${c.get()}"${c.flowOnly ? ' title="Shown in the flow lab"' : ""}><i style="background:${c.swatch}"></i>${c.label}</button>`,
     )
     .join("");
-  el.querySelectorAll<HTMLButtonElement>("[data-chip]").forEach((b) =>
+  el.querySelectorAll<HTMLButtonElement>("[data-chip]").forEach((b) => {
     b.addEventListener("click", () => {
       const c = chipDefs.find((x) => x.key === b.dataset.chip)!;
       c.set(!c.get());
       b.setAttribute("aria-pressed", String(c.get()));
-    }),
-  );
+    });
+    const t = CHIP_TIPS[b.dataset.chip!];
+    if (t) tip(b, t);
+  });
 }
 
 // ---------------------------------------------------------------- spray
@@ -757,6 +772,7 @@ const qa = new THREE.Quaternion();
 const qb = new THREE.Quaternion();
 let chartTick = 0;
 let frameMs = 0;
+let frames = 0;
 let lastSplit = display.split;
 let captionI = -1;
 let hudI = -1;
@@ -774,6 +790,7 @@ function rectOf(el: HTMLElement): Rect & { glY: number } {
 }
 
 function frame() {
+  frames++;
   if (renderPaused) {
     clock.getDelta();
     requestAnimationFrame(frame);
@@ -989,6 +1006,18 @@ Object.assign(window as unknown as Record<string, unknown>, {
     doSpray,
     get frameMs() {
       return frameMs;
+    },
+    get frames() {
+      return frames;
+    },
+    get paused() {
+      return renderPaused;
+    },
+    /** Screen position (stage px) of the ball in the current main view. */
+    ballOnScreen() {
+      const b = currentBall().r.clone().project(view.kind === "flowlab" ? flowLab.camera : camera);
+      if (view.kind === "flowlab") b.set(0, 0, 0).project(flowLab.camera);
+      return { x: ((b.x + 1) / 2) * stageW, y: ((1 - b.y) / 2) * stageH };
     },
     overlays,
     display,
