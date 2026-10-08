@@ -111,6 +111,7 @@ interface Pin {
 let pins: Pin[] = [];
 /** True while the batting game runs: no pinned paths or other give-aways are drawn. */
 let gameActive = false;
+let pitchBallHidden = false;
 const playback = new Playback();
 if (narrow) {
   // Phones: a reduced overlay set.
@@ -840,6 +841,7 @@ function frame() {
   const scale = R * display.ballScale * enlarge;
   mainRig.group.position.copy(pos);
   mainRig.group.scale.setScalar(scale);
+  mainRig.group.visible = !pitchBallHidden;
   mainRig.spin.quaternion.copy(q);
   mainRig.update(snapshot, { ...overlays, streamlines: false, smoke: false }, dt, flowSpeed, shedHz, flowChanged);
   mainRig.wake.setFocal(H / (2 * Math.tan((camera.fov * deg) / 2)));
@@ -848,7 +850,7 @@ function frame() {
   mainRig.arrows.update(pos, vecs, rec.ball.mass * G, 0.5, display.arrowScale, scale);
   halo.position.copy(pos);
   halo.scale.setScalar(scale * 5);
-  halo.visible = enlarge * display.ballScale > 1.6 && view.kind !== "ball";
+  halo.visible = enlarge * display.ballScale > 1.6 && view.kind !== "ball" && !pitchBallHidden;
 
   // Flow lab rig (also drives the picture-in-picture).
   const flowVisible = view.kind === "flowlab" || display.split;
@@ -1035,6 +1037,20 @@ const game = new BattingGame({
     overlays.trail = on;
   },
   ghostOf: (p) => simulateGhost(p),
+  swing(s) {
+    const b = world.figures.getObjectByName("batter") as THREE.Object3D | undefined;
+    (b?.userData.swing as ((s: number) => void) | undefined)?.(s);
+  },
+  showPitchBall(on) {
+    pitchBallHidden = !on;
+  },
+  flyCamera(p, seconds) {
+    camRig.flyTo(p, seconds);
+  },
+  catcherView() {
+    const v = views.find((x) => x.id === "catcher")!;
+    camRig.flyTo(v.pose!, 0.8);
+  },
 });
 $("game-open").addEventListener("click", () => game.enter());
 

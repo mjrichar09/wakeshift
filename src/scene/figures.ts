@@ -88,60 +88,6 @@ function place(fig: { g: THREE.Group; head: THREE.Mesh }, at: THREE.Vector3, fac
   return fig.g;
 }
 
-/**
- * Right-handed batter in the 3B-side box, chest toward the plate (+x world), head turned to
- * the pitcher (−z world). Locally his left shoulder (+x) points at the pitcher.
- */
-export function rightHandedBatter(at: THREE.Vector3) {
-  const pose: Pose = {
-    pelvis: [0, 0.9, -0.02],
-    chest: [0.01, 1.3, 0.07],
-    head: [0.05, 1.6, 0.06],
-    hip: [
-      [0.12, 0.9, -0.02],
-      [-0.12, 0.9, -0.02],
-    ],
-    knee: [
-      [0.3, 0.5, 0.1],
-      [-0.28, 0.5, 0.1],
-    ],
-    ankle: [
-      [0.38, 0.08, 0],
-      [-0.36, 0.08, 0],
-    ],
-    shoulder: [
-      [0.18, 1.4, 0.05],
-      [-0.2, 1.42, 0.02],
-    ],
-    elbow: [
-      [0.02, 1.24, 0.22],
-      [-0.32, 1.3, 0.12],
-    ],
-    wrist: [
-      [-0.16, 1.38, 0.2],
-      [-0.2, 1.42, 0.18],
-    ],
-  };
-  const fig = build(pose, {
-    jersey: 0x24467a,
-    pants: 0xe9e6dd,
-    hat: 0x14284a,
-    props: (g) => {
-      // Bat held up behind the right shoulder (toward the catcher, local −x).
-      const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.016, 0.84, 14), mat(0xc9a06a, 0.45));
-      const a = v([-0.18, 1.4, 0.19]);
-      const b = v([-0.5, 2.0, -0.12]);
-      bat.position.copy(a).lerp(b, 0.5);
-      bat.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), b.clone().sub(a).normalize());
-      bat.castShadow = true;
-      g.add(bat);
-    },
-  });
-  const grp = place(fig, at, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0.15, 0, -1));
-  grp.name = "batter";
-  return grp;
-}
-
 /** Catcher crouched behind the plate, facing the pitcher (−z world), mitt up. */
 export function catcher(at: THREE.Vector3) {
   const pose: Pose = {

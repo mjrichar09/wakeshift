@@ -21,6 +21,11 @@ screenshot harness are adapted from the Bioreactor Lab.
   will cross the plate before it gets there: within 1.5 in barrels it, 3 in is solid contact,
   5 in a foul tip; laying off a ball scores too. Ten pitches a round at 0.35×, 0.6× or real time.
   The click is cast onto the plate plane from the camera, so guesses are measured in real inches.
+  The swing launches at the click and the bat reaches the plate 0.1 s (game time) later: within
+  ±20 ms of the ball is on time, ±40 ms a foul at best, more is a miss; clicks are taken until
+  half a second after the ball passes (late). The batter swings, and contact is simulated as a
+  batted ball (exit speed and launch from contact quality, pull/opposite field from timing and
+  location; drag and lift calibrated to big-league distances) and followed from a high camera.
 - **Hover** any overlay chip, preset or the small "i" next to a setting for an explanation (with a
   color key where it applies).
 - **Cameras** (keys 1–9): fixed views you can orbit once they arrive; **Ball cam** follows the

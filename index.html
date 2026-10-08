@@ -82,7 +82,7 @@
           <section class="game__card game__intro" data-g="intro">
             <p class="game__eyebrow">Batting game</p>
             <h2>Read the pitch</h2>
-            <p>You're behind the plate. A random pitch is coming: a knuckleball that could dance anywhere, or a fastball, slider, curve… There's no tracer. <b>Click where you think it will cross the plate, before it gets there.</b> Within 1.5 in is a barrel, 3 in solid contact, 5 in a foul tip. Lay off pitches outside the zone for points too.</p>
+            <p>You're behind the plate. A random pitch is coming: a knuckleball that could dance anywhere, or a fastball, slider, curve… There's no tracer. <b>Click where it will cross the plate.</b> The swing starts when you click and the bat takes about a tenth of a second (game time) to get there, so time it. On time and within 1.5 in is a barrel, 3 in solid contact, 5 in a foul tip; early or late and you miss. Lay off pitches outside the zone for points too.</p>
             <div class="seg game__diff" role="radiogroup" aria-label="Difficulty">
               <button type="button" role="radio" data-diff="easy">Easy · 0.35×</button>
               <button type="button" role="radio" data-diff="medium">Medium · 0.6×</button>
@@ -93,6 +93,7 @@
           <section class="game__card game__result" data-g="result" hidden>
             <p class="game__verdict" data-g="verdict"></p>
             <p class="game__points" data-g="points"></p>
+            <p class="game__hit" data-g="hit" hidden></p>
             <p class="game__pitch" data-g="pitch"></p>
             <p class="game__swing" data-g="swing"></p>
             <p class="game__legend"><i class="dot dot--guess"></i>your swing <i class="dot dot--ball"></i>the ball</p>

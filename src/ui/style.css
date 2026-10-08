@@ -493,6 +493,7 @@ kbd { font: 500 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(-
 .game__verdict--goodTake { color: var(--chart-b) !important; }
 .game__points { font: 600 20px var(--font-mono) !important; color: var(--accent) !important; margin: 2px 0 8px !important; }
 .game__pitch { color: var(--ink) !important; font-weight: 500; }
+.game__hit { font: 700 17px var(--font-display) !important; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent) !important; }
 .game__legend { font-size: 12px !important; display: flex; align-items: center; gap: 6px; }
 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
 .dot--guess { border: 2.5px solid #4fd1ff; margin-right: 2px; }

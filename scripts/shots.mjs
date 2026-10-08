@@ -208,39 +208,79 @@ await p.evaluate(() => window.lab.setView("pitcher"));
 await at(0.3);
 await shot(p, `${out}/curveball-pitcher.png`);
 
-// Batting game: a perfect swing barrels it; a take is judged ball/strike; the lab comes back.
+// Batting game: the swing launches at the click and reaches the plate 0.1 s (game time)
+// later. A click timed for that and aimed at the crossing point barrels it; a click after the
+// ball has passed is late; no click is judged ball or strike; Esc returns to the lab.
+const aimAt = () =>
+  p.evaluate(() => {
+    const g = window.lab.game;
+    const v = new (window.lab.camera.position.constructor)(g.plate.x, g.plate.y, 0).project(window.lab.camera);
+    const c = document.getElementById("scene").getBoundingClientRect();
+    return { x: c.left + ((v.x + 1) / 2) * c.width, y: c.top + ((1 - v.y) / 2) * c.height };
+  });
+const waitPitch = async (cond) => {
+  for (let k = 0; k < 400 && !(await p.evaluate(cond)); k++) await p.waitForTimeout(15);
+};
+const verdict = () => p.evaluate(() => document.querySelector('[data-g="verdict"]').textContent);
+const waitResult = async () => {
+  for (let k = 0; k < 300 && (await p.evaluate(() => window.lab.game.state)) !== "result"; k++) await p.waitForTimeout(50);
+};
 await p.click("#game-open");
 await p.waitForTimeout(800);
 await shot(p, `${out}/game-intro.png`);
 await p.click('[data-diff="easy"]');
 await p.click('[data-g="start"]');
-await p.waitForFunction(() => window.lab.game.state === "pitching" && window.lab.playback.t > 0.15, null, { timeout: 8000, polling: 16 });
-// This harness renders slowly: hold the pitch while aiming, then let it fly on.
-await p.evaluate(() => (window.lab.playback.playing = false));
-await shot(p, `${out}/game-pitch.png`);
-const aim = await p.evaluate(() => {
-  const r = window.lab.rec;
-  const i = r.n - 1;
-  const v = new (window.lab.camera.position.constructor)(r.r[3 * i], r.r[3 * i + 1], 0).project(window.lab.camera);
-  const c = document.getElementById("scene").getBoundingClientRect();
-  return { x: c.left + ((v.x + 1) / 2) * c.width, y: c.top + ((1 - v.y) / 2) * c.height };
-});
-await p.mouse.click(aim.x, aim.y);
+await waitPitch(() => window.lab.game.state === "pitching" && window.lab.playback.t > 0.05);
+// Pause just before the right moment (this harness renders slowly), set the clock exactly, click.
+let a = await aimAt();
+await p.evaluate(({ x, y }) => {
+  const pb = window.lab.playback;
+  pb.playing = false;
+  pb.scrub(window.lab.game.plate.t - 0.1);
+  document.getElementById("scene").dispatchEvent(new PointerEvent("pointerdown", { clientX: x, clientY: y, bubbles: true }));
+}, a);
+await p.evaluate(() => { const pb = window.lab.playback; pb.scrub(window.lab.game.plate.t - 0.03); });
+await p.waitForTimeout(400);
+await shot(p, `${out}/game-swing.png`);
 await p.evaluate(() => (window.lab.playback.playing = true));
-await p.waitForFunction(() => window.lab.game.state === "result", null, { timeout: 15000, polling: 100 });
-const v1 = await p.evaluate(() => document.querySelector('[data-g="verdict"]').textContent);
-check("game: a swing at the true crossing point barrels it", v1 === "Barrelled it!", v1);
-await shot(p, `${out}/game-result.png`);
+await waitResult();
+const v1 = await verdict();
+check("game: on-time swing at the crossing point barrels it", v1 === "Barrelled it!", v1);
+await p.waitForTimeout(2500);
+await shot(p, `${out}/game-flight.png`);
+await p.waitForTimeout(5000);
+await shot(p, `${out}/game-landed.png`);
+const hitText = await p.evaluate(() => document.querySelector('[data-g="hit"]').textContent);
+console.log("INFO  batted ball:", hitText);
+
 await p.keyboard.press("Space");
-await p.waitForFunction(() => window.lab.game.state === "result", null, { timeout: 15000, polling: 100 });
-const v2 = await p.evaluate(() => document.querySelector('[data-g="verdict"]').textContent);
-check("game: no swing is judged ball or strike", v2 === "Good eye: ball" || v2 === "Called strike", v2);
-for (let k = 0; k < 8; k++) {
+await p.waitForTimeout(100);
+a = await aimAt(); // aim before the pitch: the late window is only half a second
+await waitPitch(() => window.lab.game.state === "pitching" && window.lab.playback.t > 0.05);
+// Put the ball just past the plate and click straight away (the window is half a second).
+// The click is dispatched in the same step (a real click here can arrive later than that).
+await p.evaluate(({ x, y }) => {
+  const pb = window.lab.playback;
+  pb.playing = false;
+  pb.scrub(window.lab.game.plate.t + 0.02);
+  window.lab.game.update();
+  document.getElementById("scene").dispatchEvent(new PointerEvent("pointerdown", { clientX: x, clientY: y, bubbles: true }));
+  pb.playing = true;
+}, a);
+await waitResult();
+const v2 = await verdict();
+check("game: a click after the ball passes is late", /Late/.test(v2), v2);
+
+await p.keyboard.press("Space");
+await waitResult();
+const v3 = await verdict();
+check("game: no swing is judged ball or strike", v3 === "Good eye: ball" || v3 === "Called strike", v3);
+for (let k = 0; k < 7; k++) {
   await p.keyboard.press("Space");
-  await p.waitForFunction(() => window.lab.game.state === "result", null, { timeout: 15000, polling: 100 });
+  await waitResult();
 }
 await p.keyboard.press("Space");
-await p.waitForFunction(() => window.lab.game.state === "summary", null, { timeout: 8000, polling: 100 });
+for (let k = 0; k < 100 && (await p.evaluate(() => window.lab.game.state)) !== "summary"; k++) await p.waitForTimeout(50);
 await shot(p, `${out}/game-summary.png`);
 await p.keyboard.press("Escape");
 await p.waitForTimeout(500);

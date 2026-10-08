@@ -89,6 +89,8 @@ export interface Params {
     maxTime: number;
     /** Stop at the plate plane (baseball) / the far end of the court (volleyball). */
     stopAtTarget: boolean;
+    /** Baseball: z of the plane where the flight stops (default 0, the plate's front edge). */
+    targetZ?: number;
     stopAtFloor: boolean;
     /** Record per-sector separation detail (off for batch runs). */
     recordSectors: boolean;

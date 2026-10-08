@@ -7,7 +7,8 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { COURT, FIELD, RUBBER_Z } from "../physics/constants";
 import type { Sport } from "../physics/params";
-import { catcher, passer, rightHandedBatter } from "./figures";
+import { catcher, passer } from "./figures";
+import { swingingBatter } from "./batter";
 import { dirtTexture, grassTexture, netTexture, paintTexture, skyDome, woodTexture } from "./textures";
 
 export interface World {
@@ -81,11 +82,9 @@ export function createWorld(canvas: HTMLCanvasElement): World {
       }
       applyShadows();
       // The venue never moves: compute its matrices once and skip it every frame.
-      for (const g of [venue, figures]) {
-        g.matrixWorldAutoUpdate = true;
-        g.updateMatrixWorld(true);
-        g.matrixWorldAutoUpdate = false;
-      }
+      venue.matrixWorldAutoUpdate = true;
+      venue.updateMatrixWorld(true);
+      venue.matrixWorldAutoUpdate = false;
     },
     setQuality(q) {
       quality = q;
@@ -389,7 +388,7 @@ function buildField(venue: THREE.Group, figures: THREE.Group): THREE.Object3D {
   venue.add(zoneGroup);
 
   // Figures: a right-handed batter in the 3B-side box; a catcher crouched behind the plate.
-  figures.add(rightHandedBatter(new THREE.Vector3(-(inner + FIELD.boxWidth / 2), 0, plateCenterZ)));
+  figures.add(swingingBatter(new THREE.Vector3(-(inner + FIELD.boxWidth / 2), 0, plateCenterZ)));
   figures.add(catcher(new THREE.Vector3(0, 0, FIELD.plateDepth + 0.75)));
   return zoneGroup;
 }

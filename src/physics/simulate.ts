@@ -345,8 +345,9 @@ export function simulate(p: Params): FlightRecord {
     // --- termination, with linear interpolation to the crossing ---
     let frac = -1;
     let outcome: Outcome | null = null;
-    if (p.sport === "baseball" && p.sim.stopAtTarget && prev[2] < 0 && state[2] >= 0) {
-      frac = (0 - prev[2]) / (state[2] - prev[2]);
+    const tz = p.sim.targetZ ?? 0;
+    if (p.sport === "baseball" && p.sim.stopAtTarget && prev[2] < tz && state[2] >= tz) {
+      frac = (tz - prev[2]) / (state[2] - prev[2]);
       outcome = "plate";
     }
     if (p.sport === "volleyball" && prev[2] < 0 && state[2] >= 0) {
