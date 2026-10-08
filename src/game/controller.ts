@@ -45,8 +45,8 @@ export interface GameApi {
   /** Show the flight path (after the pitch). */
   reveal(on: boolean): void;
   ghostOf(p: Params): FlightRecord;
-  /** Pose the batter for swing progress 0..1. */
-  swing(s: number): void;
+  /** Pose the batter: load (stride, 0..1) while the pitch flies, swing progress 0..1. */
+  poseBatter(load: number, swing: number): void;
   /** Hide the pitched ball (once it has been hit). */
   showPitchBall(on: boolean): void;
   flyCamera(p: Pose, seconds: number): void;
@@ -147,7 +147,7 @@ export class BattingGame {
 
   exit() {
     this.endFlight();
-    this.api.swing(0);
+    this.api.poseBatter(0, 0);
     this.api.showPitchBall(true);
     this.state = "off";
     this.root.hidden = true;
@@ -188,7 +188,7 @@ export class BattingGame {
 
   private nextPitch() {
     this.endFlight();
-    this.api.swing(0);
+    this.api.poseBatter(0, 0);
     this.api.showPitchBall(true);
     if (this.cameraMoved) {
       this.api.catcherView();
@@ -238,11 +238,16 @@ export class BattingGame {
     return this.api.duration() + ((performance.now() - this.endWall) / 1000) * DIFFICULTY[this.difficulty].speed;
   }
 
-  /** The swing launches at the click: the bat reaches the plate SWING_DELAY later. */
+  /**
+   * The batter loads and strides while the pitch is in the air (finishing a little before it
+   * arrives); the swing launches at the click and the bat reaches the plate SWING_DELAY later.
+   */
   private animateSwing() {
-    if (!this.guess || this.state === "off") return;
-    const start = this.swingT + SWING_DELAY - CONTACT_AT * SWING_TIME;
-    this.api.swing((this.simTime() - start) / SWING_TIME);
+    if (this.state === "off" || this.state === "ready" || this.state === "summary") return;
+    const st = this.state === "countdown" ? 0 : this.simTime();
+    const load = (st - 0.04) / Math.max(0.1, this.plate.t - 0.2);
+    const swing = this.guess ? (st - (this.swingT + SWING_DELAY - CONTACT_AT * SWING_TIME)) / SWING_TIME : 0;
+    this.api.poseBatter(load, swing);
   }
 
   private launch(out: Outcome, a: { x: number; y: number }) {

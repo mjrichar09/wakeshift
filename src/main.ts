@@ -111,6 +111,10 @@ interface Pin {
 let pins: Pin[] = [];
 /** True while the batting game runs: no pinned paths or other give-aways are drawn. */
 let gameActive = false;
+function poseBatter(load: number, swing: number) {
+  const b = world.figures.getObjectByName("batter") as THREE.Object3D | undefined;
+  (b?.userData.pose as ((l: number, s: number, t: number) => void) | undefined)?.(load, swing, performance.now() / 1000);
+}
 let pitchBallHidden = false;
 const playback = new Playback();
 if (narrow) {
@@ -867,6 +871,8 @@ function frame() {
   }
 
   game.update();
+  // Outside the game the batter loads and strides with each pitch and takes it.
+  if (!gameActive && params.sport === "baseball") poseBatter((playback.t - 0.04) / Math.max(0.1, playback.duration - 0.2), 0);
   trails.setProgress(iN);
   trails.setVisibility(overlays.trail, overlays.ghost);
   markers.setReveal(game.active ? 0 : THREE.MathUtils.smoothstep(playback.t / rec.t[rec.n - 1], 0.82, 0.98));
@@ -1037,9 +1043,8 @@ const game = new BattingGame({
     overlays.trail = on;
   },
   ghostOf: (p) => simulateGhost(p),
-  swing(s) {
-    const b = world.figures.getObjectByName("batter") as THREE.Object3D | undefined;
-    (b?.userData.swing as ((s: number) => void) | undefined)?.(s);
+  poseBatter(load, swing) {
+    poseBatter(load, swing);
   },
   showPitchBall(on) {
     pitchBallHidden = !on;
@@ -1115,6 +1120,7 @@ Object.assign(window as unknown as Record<string, unknown>, {
     setShowArrows: (v: boolean) => (showArrows = v),
     setQuality: (q: "high" | "low") => applyQuality(q),
     setPaused: (v: boolean) => (renderPaused = v),
+    poseBatter: (l: number, s: number) => poseBatter(l, s),
     game,
     plusX: () => plusXName(params.sport),
   },
