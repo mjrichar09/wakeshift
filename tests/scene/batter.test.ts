@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { solveIK, swingingBatter, sweetSpot } from "../../src/scene/batter";
-import { FIELD } from "../../src/physics/constants";
+import { BATTER_AT } from "../../src/game/batting";
 
 // The batter stands in the 3B-side box (x < 0) facing the plate.
-const at = new THREE.Vector3(-(FIELD.plateWidth / 2 + FIELD.boxGap + FIELD.boxWidth / 2), 0, FIELD.plateDepth / 2);
+const at = new THREE.Vector3(BATTER_AT.x, BATTER_AT.y, BATTER_AT.z);
 
 describe("two-bone IK", () => {
   it("keeps segment lengths and bends toward the pole", () => {
@@ -56,6 +56,17 @@ describe("swinging batter", () => {
       });
       expect(minY).toBeGreaterThan(-0.03);
       expect(minY).toBeLessThan(0.05);
+    }
+  });
+
+  it("swings the sweet spot exactly to where you click", () => {
+    const b = swingingBatter(at);
+    for (const click of [{ x: 0, y: 0.8 }, { x: 0.18, y: 0.55 }, { x: -0.15, y: 1.0 }, { x: 0.05, y: 0.62 }]) {
+      b.userData.setTarget(click);
+      const p = sweetSpot(b, 0.55);
+      expect(p.x).toBeCloseTo(click.x, 3);
+      expect(p.y).toBeCloseTo(click.y, 3);
+      expect(p.z).toBeCloseTo(0, 3);
     }
   });
 });

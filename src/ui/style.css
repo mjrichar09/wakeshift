@@ -488,7 +488,7 @@ kbd { font: 500 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(-
 .game__hint { font: 500 11.5px var(--font-mono); color: var(--muted); }
 .game__verdict { margin: 0 !important; font: 700 26px/1.05 var(--font-display) !important; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink) !important; }
 .game__verdict--barrel, .game__verdict--solid { color: var(--good) !important; }
-.game__verdict--foul { color: var(--warn) !important; }
+.game__verdict--foul, .game__verdict--weak { color: var(--warn) !important; }
 .game__verdict--miss, .game__verdict--chase, .game__verdict--calledStrike { color: var(--crit) !important; }
 .game__verdict--goodTake { color: var(--chart-b) !important; }
 .game__points { font: 600 20px var(--font-mono) !important; color: var(--accent) !important; margin: 2px 0 8px !important; }

@@ -1,38 +1,88 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { crossing, isStrike, plateHit, randomPitch, score } from "../../src/game/batting";
+import { batAtContact, contactAlongBat, crossing, isStrike, plateHit, randomPitch, score } from "../../src/game/batting";
 import { BASEBALL_VIEWS } from "../../src/scene/cameras";
 import { arrival, simulate } from "../../src/physics/simulate";
 import { mulberry32 } from "../../src/physics/rng";
 
 const IN = 0.0254;
 
+describe("the bat at contact", () => {
+  it("puts the sweet spot exactly on a reachable click", () => {
+    for (const c of [{ x: 0, y: 0.8 }, { x: 0.15, y: 0.55 }, { x: -0.15, y: 1.0 }]) {
+      const b = batAtContact(c);
+      expect(b.reached).toBe(true);
+      expect(b.sweet.x).toBeCloseTo(c.x, 9);
+      expect(b.sweet.y).toBeCloseTo(c.y, 9);
+      expect(b.sweet.z).toBeCloseTo(0, 9);
+      // The knob is back toward the batter (3B side) and the end out past the click.
+      expect(b.knob.x).toBeLessThan(c.x);
+      expect(b.end.x).toBeGreaterThan(c.x);
+    }
+  });
+
+  it("tilts the barrel down for a low pitch and keeps it nearer level for a high one", () => {
+    const slope = (y: number) => {
+      const b = batAtContact({ x: 0, y });
+      return (b.end.y - b.knob.y) / Math.hypot(b.end.x - b.knob.x, b.end.z - b.knob.z);
+    };
+    expect(slope(0.5)).toBeLessThan(slope(1.05));
+  });
+
+  it("cannot reach a click far outside", () => {
+    const b = batAtContact({ x: 0.75, y: 0.8 });
+    expect(b.reached).toBe(false);
+    expect(b.sweet.x).toBeLessThan(0.7);
+  });
+
+  it("finds where the ball meets the bat", () => {
+    const b = batAtContact({ x: 0, y: 0.8 });
+    expect(contactAlongBat({ x: 0, y: 0.8 }, b)).toMatchObject({ hit: true });
+    expect(Math.abs(contactAlongBat({ x: 0, y: 0.8 }, b).along)).toBeLessThan(1e-9);
+    // Toward the hands along the bat: still on the bat.
+    const toward = { x: b.sweet.x + (b.knob.x - b.sweet.x) * 0.4, y: b.sweet.y + (b.knob.y - b.sweet.y) * 0.4 };
+    const t = contactAlongBat(toward, b);
+    expect(t.hit).toBe(true);
+    expect(t.along).toBeLessThan(-0.1);
+    // Well above the bat: a miss.
+    expect(contactAlongBat({ x: 0, y: 0.8 + 0.12 }, b).hit).toBe(false);
+  });
+});
+
 describe("scoring", () => {
-  const strike = { x: 0, y: 0.75 };
-  const ball = { x: 0.45, y: 0.75 };
+  const mid = { x: 0, y: 0.8 };
+  const bat = batAtContact(mid);
+  const along = (inches: number) => {
+    const ax = bat.end.x - bat.knob.x;
+    const ay = bat.end.y - bat.knob.y;
+    const az = bat.end.z - bat.knob.z;
+    const L = Math.hypot(ax, ay, az);
+    return { x: bat.sweet.x + (ax / L) * inches * IN, y: bat.sweet.y + (ay / L) * inches * IN };
+  };
 
-  it("grades a swing by how close the guess is", () => {
-    expect(score(strike, { x: 0.02, y: 0.75 }, "easy").verdict).toBe("barrel");
-    expect(score(strike, { x: 0, y: 0.75 + 2.5 * IN }, "easy").verdict).toBe("solid");
-    expect(score(strike, { x: 4 * IN, y: 0.75 }, "easy").verdict).toBe("foul");
-    expect(score(strike, { x: 0.3, y: 0.75 }, "easy").verdict).toBe("miss");
-    expect(score(ball, { x: 0, y: 0.75 }, "easy").verdict).toBe("chase");
-  });
-
-  it("rewards taking a ball and punishes taking a strike", () => {
-    expect(score(ball, null, "easy")).toMatchObject({ verdict: "goodTake", points: 30 });
-    expect(score(strike, null, "easy")).toMatchObject({ verdict: "calledStrike", points: 0 });
-  });
-
-  it("pays more at real-time speed", () => {
-    expect(score(strike, strike, "hard").points).toBeGreaterThan(score(strike, strike, "easy").points);
+  it("grades contact by where the ball meets the bat", () => {
+    expect(score(mid, bat, "easy").verdict).toBe("barrel");
+    expect(score(along(3), bat, "easy").verdict).toBe("solid");
+    expect(score(along(-9), bat, "easy")).toMatchObject({ verdict: "weak", title: "Jammed: off the hands" });
+    expect(score({ x: 0, y: 0.8 - 2.6 * IN }, bat, "easy")).toMatchObject({ verdict: "weak", title: "Topped it" });
+    expect(score({ x: 0, y: 0.8 + 2.6 * IN }, bat, "easy")).toMatchObject({ verdict: "weak", title: "Got under it" });
+    expect(score({ x: 0, y: 0.8 + 5 * IN }, bat, "easy").verdict).toBe("miss");
   });
 
   it("needs the bat on time", () => {
-    expect(score(strike, strike, "easy", 0.01).verdict).toBe("barrel");
-    expect(score(strike, strike, "easy", -0.03).verdict).toBe("foul");
-    expect(score(strike, strike, "easy", -0.06).verdict).toBe("early");
-    expect(score(strike, strike, "easy", 0.08).verdict).toBe("late");
+    expect(score(mid, bat, "easy", 0.01).verdict).toBe("barrel");
+    expect(score(mid, bat, "easy", -0.03).verdict).toBe("foul");
+    expect(score(mid, bat, "easy", -0.06).verdict).toBe("early");
+    expect(score(mid, bat, "easy", 0.08).verdict).toBe("late");
+  });
+
+  it("rewards taking a ball and punishes taking a strike", () => {
+    expect(score({ x: 0.45, y: 0.75 }, null, "easy")).toMatchObject({ verdict: "goodTake", points: 30 });
+    expect(score(mid, null, "easy")).toMatchObject({ verdict: "calledStrike", points: 0 });
+  });
+
+  it("pays more at real-time speed", () => {
+    expect(score(mid, bat, "hard").points).toBeGreaterThan(score(mid, bat, "easy").points);
   });
 
   it("calls the zone with the ball's radius", () => {
@@ -143,12 +193,16 @@ describe("batted ball", () => {
     const rand = mulberry32(3);
     const actual = { x: 0, y: 0.8 };
     for (let k = 0; k < 20; k++) {
-      const b = contactFrom({ verdict: "barrel", title: "", points: 0, strike: true }, actual, actual, rand)!;
+      const b = contactFrom({ verdict: "barrel", title: "", points: 0, strike: true, perp: 0 }, actual, rand)!;
       expect(b.launch).toBeGreaterThan(15);
       expect(b.speed / MPH).toBeGreaterThan(99);
-      const f = contactFrom({ verdict: "foul", title: "", points: 0, strike: true }, actual, { x: 0.1, y: 0.8 }, rand)!;
+      const f = contactFrom({ verdict: "foul", title: "", points: 0, strike: true, along: 0.05 }, actual, rand)!;
       expect(fly(f).call.kind).toBe("foul");
+      const topped = contactFrom({ verdict: "weak", title: "", points: 0, strike: true, perp: 0.065, above: false }, actual, rand)!;
+      expect(fly(topped).call.kind).toBe("groundBall");
+      const under = contactFrom({ verdict: "weak", title: "", points: 0, strike: true, perp: 0.065, above: true }, actual, rand)!;
+      expect(under.launch).toBeGreaterThan(40);
     }
-    expect(contactFrom({ verdict: "miss", title: "", points: 0, strike: true }, actual, actual)).toBeNull();
+    expect(contactFrom({ verdict: "miss", title: "", points: 0, strike: true }, actual)).toBeNull();
   });
 });

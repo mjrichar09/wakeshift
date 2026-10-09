@@ -21,6 +21,11 @@ screenshot harness are adapted from the Bioreactor Lab.
   will cross the plate before it gets there: within 1.5 in barrels it, 3 in is solid contact,
   5 in a foul tip; laying off a ball scores too. Ten pitches a round at 0.35×, 0.6× or real time.
   The click is cast onto the plate plane from the camera, so guesses are measured in real inches.
+  The batter swings the bat's sweet spot (about 6 in from the end) to exactly where you click,
+  bending and reaching for low and away pitches; out-of-reach clicks get as close as his arms
+  allow. Contact is judged along the whole bat: anywhere the ball touches it (bat radius + ball
+  radius from its centreline) is contact, with a barrel near your click, solid contact within
+  about 4 in along it, and weak contact elsewhere (jammed, off the end, topped, under it).
   The swing launches at the click and the bat reaches the plate 0.1 s (game time) later: within
   ±20 ms of the ball is on time, ±40 ms a foul at best, more is a miss; clicks are taken until
   half a second after the ball passes (late). The batter swings, and contact is simulated as a

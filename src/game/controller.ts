@@ -14,7 +14,7 @@ import type { Pose } from "../scene/cameras";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
-import type { Difficulty, FlightCall, GamePitch, Outcome } from "./batting";
+import type { BatLine, Difficulty, FlightCall, GamePitch, Outcome } from "./batting";
 import {
   DIFFICULTY,
   LATE_WINDOW_MS,
@@ -23,6 +23,7 @@ import {
   battedParams,
   breaksStreak,
   callFlight,
+  batAtContact,
   contactFrom,
   crossing,
   extendsStreak,
@@ -47,6 +48,8 @@ export interface GameApi {
   ghostOf(p: Params): FlightRecord;
   /** Pose the batter: load (stride, 0..1) while the pitch flies, swing progress 0..1. */
   poseBatter(load: number, swing: number): void;
+  /** Aim the batter's swing at a click on the plate plane (null: the default swing). */
+  aimSwing(click: { x: number; y: number } | null): void;
   /** Hide the pitched ball (once it has been hit). */
   showPitchBall(on: boolean): void;
   flyCamera(p: Pose, seconds: number): void;
@@ -79,6 +82,8 @@ export class BattingGame {
   private pitch: GamePitch | null = null;
   private rec: FlightRecord | null = null;
   private guess: { x: number; y: number } | null = null;
+  /** The bat at contact for this swing: its sweet spot is on the click when reachable. */
+  private bat: BatLine | null = null;
   private swingT = 0;
   private n = 0;
   private total = 0;
@@ -124,6 +129,8 @@ export class BattingGame {
         const hit = plateHit(api.camera, ((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
         if (!hit) return;
         this.guess = hit;
+        this.bat = batAtContact(hit);
+        api.aimSwing(hit);
         this.swingT = t;
         this.placeGuess(hit);
         this.flash("Swing!");
@@ -202,6 +209,8 @@ export class BattingGame {
     this.plateWall = 0;
     this.endWall = 0;
     this.guess = null;
+    this.bat = null;
+    this.api.aimSwing(null);
     this.clearMarkers();
     this.api.reveal(false);
     this.state = "countdown";
@@ -252,7 +261,7 @@ export class BattingGame {
 
   private launch(out: Outcome, a: { x: number; y: number }) {
     if (!this.guess) return;
-    const c = contactFrom(out, a, this.guess);
+    const c = contactFrom(out, a);
     if (!c) return;
     const rec = simulate(battedParams(this.pitch!.params, a, c));
     const call = callFlight(rec.r, rec.n, c.launch);
@@ -328,7 +337,7 @@ export class BattingGame {
     const rec = this.rec!;
     const a = [this.plate.x, this.plate.y];
     const timing = this.guess ? this.swingT + SWING_DELAY - this.plate.t : 0;
-    const out = score({ x: a[0], y: a[1] }, this.guess, this.difficulty, timing);
+    const out = score({ x: a[0], y: a[1] }, this.bat, this.difficulty, timing);
     this.log.push(out);
     this.total += out.points;
     if (extendsStreak(out.verdict)) {
@@ -350,7 +359,9 @@ export class BattingGame {
     const ms = Math.round(Math.abs(timing) * 1000);
     const when = ms <= 3 ? "right on time" : `${ms} ms ${timing < 0 ? "early" : "late"}`;
     const swing =
-      this.guess && out.miss !== undefined ? `Your bat was ${when}, ${(out.miss * IN).toFixed(1)} in from the ball. (On-time window ±20 ms; ±40 ms for a foul.)` : "You didn't swing.";
+      this.guess && out.miss !== undefined
+        ? `Your bat was ${when}; the ball met it ${alongText(out)}. (On time: ±20 ms; ±40 ms for a foul.)${this.bat && !this.bat.reached ? " That click was out of reach." : ""}`
+        : "You didn't swing.";
     this.el.verdict.textContent = out.title;
     this.el.verdict.className = `game__verdict game__verdict--${out.verdict}`;
     this.el.points.textContent = out.points ? `+${out.points}` : "0";
@@ -427,6 +438,8 @@ export class BattingGame {
   }
 
   private placeGuess(p: { x: number; y: number }) {
+    // Where the sweet spot actually gets to, when the click was out of reach.
+    if (this.bat && !this.bat.reached) this.disc(this.bat.sweet.x, this.bat.sweet.y, 0x4fd1ff, false);
     this.disc(p.x, p.y, 0x4fd1ff, true);
   }
 
@@ -441,4 +454,15 @@ export class BattingGame {
       this.markers.add(line);
     }
   }
+}
+
+/** "2.1 in toward the hands, 0.4 in under the centreline", or "off the bat" for a miss. */
+function alongText(o: Outcome) {
+  if (o.along === undefined || o.perp === undefined) return "nowhere";
+  const IN_ = 39.37007874;
+  const a = Math.abs(o.along) * IN_;
+  const p = o.perp * IN_;
+  const where = a < 0.5 ? "on the sweet spot" : `${a.toFixed(1)} in toward the ${o.along < 0 ? "hands" : "end"}`;
+  const off = p < 0.4 ? "" : `, ${p.toFixed(1)} in ${o.above ? "above" : "below"} the bat's centreline`;
+  return ["miss", "chase", "early", "late"].includes(o.verdict) ? `nowhere (the ball passed ${(p).toFixed(1)} in from the bat)` : `${where}${off}`;
 }

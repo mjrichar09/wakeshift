@@ -10,6 +10,7 @@
 // Arms and legs are two-bone IK chains, so elbows and knees bend instead of stretching.
 
 import * as THREE from "three";
+import { BAT_LEN, SWEET, batAtContact, toLocal } from "../game/batting";
 
 type P = [number, number, number];
 const v = (p: P) => new THREE.Vector3(...p);
@@ -118,28 +119,63 @@ function track(keys: [number, number][], s: number) {
   return a + (b - a) * smooth((s - s0) / (s1 - s0));
 }
 
-const gripCurve = new THREE.CatmullRomCurve3(SWING.map((k) => v(k.grip)), false, "centripetal");
-const batCurve = new THREE.CatmullRomCurve3(SWING.map((k) => v(k.bat).normalize()), false, "centripetal");
+/** A keyed swing with its spline curves (one per swing target). */
+class SwingPath {
+  private grip: THREE.CatmullRomCurve3;
+  private bat: THREE.CatmullRomCurve3;
+  constructor(private keys: Key[]) {
+    this.grip = new THREE.CatmullRomCurve3(keys.map((k) => v(k.grip)), false, "centripetal");
+    this.bat = new THREE.CatmullRomCurve3(keys.map((k) => v(k.bat).normalize()), false, "centripetal");
+  }
+  /** Grip and bat direction for progress s (non-uniform key spacing; exact at the keys). */
+  at(s: number) {
+    const K = this.keys;
+    let k = 0;
+    while (k < K.length - 2 && s > K[k + 1].s) k++;
+    const f = clamp01((s - K[k].s) / (K[k + 1].s - K[k].s));
+    const u = (k + f) / (K.length - 1);
+    return { grip: this.grip.getPoint(u), bat: this.bat.getPoint(u).normalize() };
+  }
+}
 
-/** Position along the keyed swing for progress s (non-uniform key spacing). */
-function swingAt(s: number) {
-  let k = 0;
-  while (k < SWING.length - 2 && s > SWING[k + 1].s) k++;
-  const f = clamp01((s - SWING[k].s) / (SWING[k + 1].s - SWING[k].s));
-  const u = (k + f) / (SWING.length - 1);
-  return { grip: gripCurve.getPoint(u), bat: batCurve.getPoint(u).normalize() };
+const DEFAULT_PATH = new SwingPath(SWING);
+
+/**
+ * The swing re-aimed at a click on the plate plane: the contact key puts the sweet spot on
+ * the click (see batAtContact), and the keys either side are blended toward it so the path
+ * stays smooth.
+ */
+export function pathTo(click: { x: number; y: number }): SwingPath {
+  const b = batAtContact(click);
+  const knob = toLocal(b.knob);
+  const end = toLocal(b.end);
+  const dir = v([end.x - knob.x, end.y - knob.y, end.z - knob.z]).normalize();
+  const contact: Key = { s: 0.55, grip: [knob.x, knob.y, knob.z], bat: [dir.x, dir.y, dir.z] };
+  const slot = SWING[1];
+  const before: Key = {
+    s: 0.42,
+    grip: v(slot.grip).lerp(v(contact.grip), 0.62).toArray() as P,
+    bat: v(slot.bat).normalize().lerp(dir, 0.5).normalize().toArray() as P,
+  };
+  const extDir = dir.clone().applyAxisAngle(Y, THREE.MathUtils.degToRad(55)).add(new THREE.Vector3(0, 0.15, 0)).normalize();
+  const extension: Key = { s: 0.7, grip: v(contact.grip).add(new THREE.Vector3(0.18, 0.09, -0.04)).toArray() as P, bat: extDir.toArray() as P };
+  return new SwingPath([SWING[0], SWING[1], before, contact, extension, SWING[5], SWING[6]]);
 }
 
 // ------------------------------------------------------------------ the figure
 
-const BAT_LEN = 0.84;
 const UPPER_ARM = 0.29;
 const FOREARM = 0.28;
 const THIGH = 0.45;
 const SHIN = 0.45;
 
 export interface SwingingBatter extends THREE.Group {
-  userData: { pose: (load: number, swing: number, time?: number) => void; swing: (s: number) => void };
+  userData: {
+    pose: (load: number, swing: number, time?: number) => void;
+    swing: (s: number) => void;
+    /** Aim the swing at a click on the plate plane (world), or back to the default. */
+    setTarget: (click: { x: number; y: number } | null) => void;
+  };
 }
 
 function batGeometry() {
@@ -270,6 +306,8 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
   g.add(trail);
   const samples: { a: THREE.Vector3; b: THREE.Vector3 }[] = [];
 
+  let path = DEFAULT_PATH;
+
   const placeFoot = (footG: THREE.Group, ankle: THREE.Vector3, yaw: number, heel: number) => {
     footG.position.set(ankle.x, 0.045 + heel * 0.06, ankle.z);
     footG.rotation.set(-heel, yaw, 0, "YXZ");
@@ -298,9 +336,51 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
     torso.position.copy(chestBase);
     torso.rotation.set(lean, (hipYaw + 2 * shYaw) / 3, 0.18 * smooth((s - 0.3) / 0.3) * (1 - smooth((s - 0.75) / 0.25)), "YXZ");
     torso.updateMatrixWorld();
+    // Bat: stance → loaded → keyed swing.
+    let grip: THREE.Vector3;
+    let dir: THREE.Vector3;
+    if (!swinging) {
+      const k = smooth(load);
+      grip = v(STANCE.grip).lerp(v(LOADED.grip), k);
+      dir = v(STANCE.bat).normalize().lerp(v(LOADED.bat).normalize(), k).applyAxisAngle(new THREE.Vector3(1, 0, 0), waggle).normalize();
+    } else {
+      const at = path.at(s);
+      grip = at.grip;
+      dir = at.bat;
+    }
+    // The knob sits at the grip, so the sweet spot is exactly SWEET × BAT_LEN along the bat.
+    bat.position.copy(grip);
+    bat.quaternion.setFromUnitVectors(Y, dir);
+
+    // Reaching for a low or away target: bend at the waist toward the hands and sink at the
+    // knees, so the arms can stay on the bat and the body stays in one piece.
+    const shoulderOffset = new THREE.Vector3(0, 0.43, Math.sin(lean) * 0.172);
+    const bendQ = new THREE.Quaternion();
+    {
+      const base = chestBase.clone().add(shoulderOffset);
+      const need = grip.distanceTo(base) - 0.5;
+      if (swinging && need > 0) {
+        const k = Math.min(need, 0.32) * Math.sin(Math.PI * clamp01((s - 0.15) / 0.75));
+        const toward = grip.clone().sub(base).normalize().multiplyScalar(k);
+        // Sink: lower hips and chest together by part of the downward reach.
+        const sink = new THREE.Vector3(0, Math.min(0, toward.y) * 0.6, 0);
+        pelvisPos.add(sink);
+        chestBase.add(sink);
+        pelvisG.position.copy(pelvisPos);
+        torso.position.copy(chestBase);
+        // Bend: tilt the torso about its base so the shoulders move toward the hands.
+        const flat = new THREE.Vector3(toward.x, 0, toward.z);
+        const lenH = flat.length();
+        if (lenH > 1e-4) {
+          const axis = new THREE.Vector3().crossVectors(Y, flat).normalize();
+          bendQ.setFromAxisAngle(axis, Math.asin(Math.min(lenH / 0.43, 0.85)));
+          torso.quaternion.premultiply(bendQ);
+        }
+      }
+    }
     // Shoulder line rotates with the shoulders; the rear shoulder dips through contact.
-    const shoulderC = chestBase.clone().add(new THREE.Vector3(Math.sin(lean) * 0, 0.43, Math.sin(lean) * 0.43 * 0.4));
-    const across = new THREE.Vector3(1, 0, 0).applyAxisAngle(Y, shYaw);
+    const shoulderC = chestBase.clone().add(shoulderOffset.clone().applyQuaternion(bendQ));
+    const across = new THREE.Vector3(1, 0, 0).applyAxisAngle(Y, shYaw).applyQuaternion(bendQ);
     const dip = 0.07 * Math.sin(Math.PI * clamp01((s - 0.2) / 0.6));
     const shL = shoulderC.clone().addScaledVector(across, 0.18).add(new THREE.Vector3(0, dip * 0.6, 0));
     const shR = shoulderC.clone().addScaledVector(across, -0.18).add(new THREE.Vector3(0, -dip, 0));
@@ -311,21 +391,6 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
     head.position.copy(neckTop).add(new THREE.Vector3(0.01, 0.1, 0.01));
     const look = s < 0.55 ? Math.PI / 2 - 0.12 : Math.PI / 2 - 0.12 + (shYaw - 1.2) * 0.35;
     head.rotation.set(0.08, look, 0, "YXZ");
-
-    // Bat: stance → loaded → keyed swing.
-    let grip: THREE.Vector3;
-    let dir: THREE.Vector3;
-    if (!swinging) {
-      const k = smooth(load);
-      grip = v(STANCE.grip).lerp(v(LOADED.grip), k);
-      dir = v(STANCE.bat).normalize().lerp(v(LOADED.bat).normalize(), k).applyAxisAngle(new THREE.Vector3(1, 0, 0), waggle).normalize();
-    } else {
-      const at = swingAt(s);
-      grip = at.grip.add(new THREE.Vector3(shift * 0.6, 0, 0));
-      dir = at.bat;
-    }
-    bat.position.copy(grip).addScaledVector(dir, -0.012);
-    bat.quaternion.setFromUnitVectors(Y, dir);
 
     // Hands on the handle: bottom (left) hand at the knob, top (right) hand just above it.
     const handL = grip.clone().addScaledVector(dir, 0.035);
@@ -394,6 +459,7 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
   pose(0, 0);
   g.userData.pose = pose;
   g.userData.swing = (s: number) => pose(1, s);
+  g.userData.setTarget = (click) => (path = click ? pathTo(click) : DEFAULT_PATH);
   g.position.copy(at);
   g.rotation.y = Math.atan2(1, 0); // face +x world: the plate
   g.name = "batter";
@@ -405,5 +471,5 @@ export function sweetSpot(batter: SwingingBatter, s: number, load = 1): THREE.Ve
   batter.userData.pose(load, s);
   batter.updateMatrixWorld(true);
   const bat = batter.getObjectByName("bat")!;
-  return new THREE.Vector3(0, BAT_LEN * 0.82, 0).applyMatrix4(bat.matrixWorld);
+  return new THREE.Vector3(0, BAT_LEN * SWEET, 0).applyMatrix4(bat.matrixWorld);
 }

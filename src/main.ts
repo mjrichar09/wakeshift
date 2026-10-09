@@ -111,6 +111,10 @@ interface Pin {
 let pins: Pin[] = [];
 /** True while the batting game runs: no pinned paths or other give-aways are drawn. */
 let gameActive = false;
+function aimBatter(click: { x: number; y: number } | null) {
+  const b = world.figures.getObjectByName("batter") as THREE.Object3D | undefined;
+  (b?.userData.setTarget as ((c: { x: number; y: number } | null) => void) | undefined)?.(click);
+}
 function poseBatter(load: number, swing: number) {
   const b = world.figures.getObjectByName("batter") as THREE.Object3D | undefined;
   (b?.userData.pose as ((l: number, s: number, t: number) => void) | undefined)?.(load, swing, performance.now() / 1000);
@@ -1046,6 +1050,9 @@ const game = new BattingGame({
   poseBatter(load, swing) {
     poseBatter(load, swing);
   },
+  aimSwing(click) {
+    aimBatter(click);
+  },
   showPitchBall(on) {
     pitchBallHidden = !on;
   },
@@ -1121,6 +1128,7 @@ Object.assign(window as unknown as Record<string, unknown>, {
     setQuality: (q: "high" | "low") => applyQuality(q),
     setPaused: (v: boolean) => (renderPaused = v),
     poseBatter: (l: number, s: number) => poseBatter(l, s),
+    aimSwing: (c: { x: number; y: number } | null) => aimBatter(c),
     game,
     plusX: () => plusXName(params.sport),
   },

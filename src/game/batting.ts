@@ -99,7 +99,7 @@ export function isStrike(x: number, y: number, radius = 0.037) {
   return Math.abs(x) <= FIELD.plateWidth / 2 + radius && y >= FIELD.strikeZoneBottom - radius && y <= FIELD.strikeZoneTop + radius;
 }
 
-export type Verdict = "barrel" | "solid" | "foul" | "miss" | "chase" | "goodTake" | "calledStrike" | "early" | "late";
+export type Verdict = "barrel" | "solid" | "weak" | "foul" | "miss" | "chase" | "goodTake" | "calledStrike" | "early" | "late";
 
 export interface Outcome {
   verdict: Verdict;
@@ -109,43 +109,169 @@ export interface Outcome {
   miss?: number;
   /** Bat arrival minus ball arrival, s (swings only): negative = early. */
   timing?: number;
+  /** Where the ball met the bat (swings only): along it from the sweet spot, and off it. */
+  along?: number;
+  perp?: number;
+  above?: boolean;
   strike: boolean;
 }
 
 const IN = 0.0254;
 
+// ------------------------------------------------------------------ the bat at contact
+
+/** Where the batter stands (world): the middle of the 3B-side box, a right-handed batter. */
+export const BATTER_AT = {
+  x: -(FIELD.plateWidth / 2 + FIELD.boxGap + FIELD.boxWidth / 2),
+  y: 0,
+  z: FIELD.plateDepth / 2,
+};
+
+export const BAT_LEN = 0.84;
+/** Sweet spot: about 6 in from the end of the bat, as a fraction from the knob. */
+export const SWEET = 0.82;
+
+/** Bat radius at distance u (m) from the knob — the drawn bat's profile. */
+export function batRadius(u: number) {
+  const f = u / BAT_LEN;
+  const pts: [number, number][] = [[0, 0.028], [0.02, 0.028], [0.035, 0.017], [0.3, 0.0175], [0.55, 0.032], [0.72, 0.044], [0.965, 0.044], [0.99, 0.037], [1, 0.02]];
+  if (f <= 0) return pts[0][1];
+  for (let i = 1; i < pts.length; i++)
+    if (f <= pts[i][0]) {
+      const [f0, r0] = pts[i - 1];
+      const [f1, r1] = pts[i];
+      return r0 + ((r1 - r0) * (f - f0)) / (f1 - f0);
+    }
+  return 0.02;
+}
+
+type V3 = { x: number; y: number; z: number };
+const sub = (a: V3, b: V3) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const addS = (a: V3, b: V3, k: number) => ({ x: a.x + b.x * k, y: a.y + b.y * k, z: a.z + b.z * k });
+const len = (a: V3) => Math.hypot(a.x, a.y, a.z);
+const scale = (a: V3, k: number) => ({ x: a.x * k, y: a.y * k, z: a.z * k });
+
+/** World ↔ batter-local (local: +z toward the plate, +x toward the pitcher, +y up). */
+export const toLocal = (w: V3): V3 => ({ x: -(w.z - BATTER_AT.z), y: w.y, z: w.x - BATTER_AT.x });
+export const toWorld = (l: V3): V3 => ({ x: l.z + BATTER_AT.x, y: l.y, z: BATTER_AT.z - l.x });
+
+export interface BatLine {
+  /** World positions of the knob, the sweet spot and the end of the bat at contact. */
+  knob: V3;
+  sweet: V3;
+  end: V3;
+  /** False when the click was out of reach: the sweet spot gets as close as the arms allow. */
+  reached: boolean;
+}
+
 /**
- * Score a pitch. `guess` is null when the batter did not swing. Contact needs the guess
- * within 1.5 in (barrel), 3 in (solid) or 5 in (foul tip) of where the ball crossed, AND the
- * bat on time: within 20 ms of the ball is clean, 20–40 ms is at best a foul tip, more is a
- * whiff (early or late). `timing` = bat arrival − ball arrival (s); omit for "on time".
+ * Point the hands work around at contact (between the shoulders, allowing for the batter
+ * crouching and leaning into low and away pitches) and how far the knob can get from it.
+ * Inside pitches are reached by pulling the hands in.
  */
-export function score(actual: { x: number; y: number }, guess: { x: number; y: number } | null, difficulty: Difficulty, timing = 0): Outcome {
+const REACH_CENTER: V3 = { x: 0.05, y: 1.25, z: 0.12 };
+const REACH_MAX = 0.72;
+const REACH_MIN = 0.08;
+
+/**
+ * The bat at the moment of contact for a click on the plate plane: the sweet spot sits on the
+ * click and the bat points back to the hands, which ride a little above the ball (so low
+ * pitches are hit with the barrel tilted down). Out of reach, the hands go as far as they can
+ * and the bat keeps its angle.
+ */
+export function batAtContact(click: { x: number; y: number }): BatLine {
+  const S = toLocal({ x: click.x, y: click.y, z: 0 });
+  const handTarget: V3 = { x: 0.12, y: THREE.MathUtils.clamp(click.y + 0.15, 0.72, 1.28), z: 0.33 };
+  const toS = sub(S, handTarget);
+  const dir = scale(toS, 1 / Math.max(len(toS), 1e-6));
+  let knob = addS(S, dir, -SWEET * BAT_LEN);
+  const fromC = sub(knob, REACH_CENTER);
+  const d = len(fromC);
+  let reached = true;
+  if (d > REACH_MAX || d < REACH_MIN) {
+    knob = addS(REACH_CENTER, fromC, THREE.MathUtils.clamp(d, REACH_MIN, REACH_MAX) / Math.max(d, 1e-6));
+    reached = false;
+  }
+  const sweet = addS(knob, dir, SWEET * BAT_LEN);
+  const endP = addS(knob, dir, BAT_LEN);
+  return { knob: toWorld(knob), sweet: toWorld(sweet), end: toWorld(endP), reached };
+}
+
+export interface AlongBat {
+  /** Distance from the knob to the closest point on the bat (m). */
+  u: number;
+  /** Signed distance from the sweet spot along the bat (m): + toward the end, − toward the hands. */
+  along: number;
+  /** Distance from the bat's centreline (m), and whether the ball is above it. */
+  perp: number;
+  above: boolean;
+  /** True when the ball touches the bat: within bat radius + ball radius of the centreline. */
+  hit: boolean;
+}
+
+export const BALL_R = 0.037;
+
+/** Where a ball at the plate plane meets the bat line. */
+export function contactAlongBat(ball: { x: number; y: number }, bat: BatLine): AlongBat {
+  const B = { x: ball.x, y: ball.y, z: 0 };
+  const axis = sub(bat.end, bat.knob);
+  const L = len(axis);
+  const a = scale(axis, 1 / L);
+  const rel = sub(B, bat.knob);
+  const uRaw = rel.x * a.x + rel.y * a.y + rel.z * a.z;
+  const u = THREE.MathUtils.clamp(uRaw, 0, L);
+  const closest = addS(bat.knob, a, u);
+  const off = sub(B, closest);
+  const perp = len(off);
+  const hit = uRaw >= -BALL_R && uRaw <= L + BALL_R && perp <= batRadius(u) + BALL_R;
+  return { u, along: u - SWEET * L, perp, above: off.y > 0, hit };
+}
+
+/**
+ * Score a pitch. `bat` is null when the batter did not swing. Timing first: within 20 ms
+ * of the ball is clean, 20–40 ms is at best a foul, more is a whiff (early or late). Then
+ * where the ball met the bat: within 1.5 in of the sweet spot (your click) is a barrel,
+ * within 4 in along the bat and 2 in off its centreline is solid, anywhere else on the bat
+ * is weak contact (jammed, off the end, topped, under it), and missing the bat is a miss.
+ * `timing` = bat arrival − ball arrival (s).
+ */
+export function score(actual: { x: number; y: number }, bat: BatLine | null, difficulty: Difficulty, timing = 0): Outcome {
   const strike = isStrike(actual.x, actual.y);
   const m = DIFFICULTY[difficulty].mult;
-  if (!guess) {
+  if (!bat) {
     return strike
       ? { verdict: "calledStrike", title: "Called strike", points: 0, strike }
       : { verdict: "goodTake", title: "Good eye: ball", points: Math.round(30 * m), strike };
   }
-  const d = Math.hypot(guess.x - actual.x, guess.y - actual.y);
+  const c = contactAlongBat(actual, bat);
+  const miss = Math.hypot(bat.sweet.x - actual.x, bat.sweet.y - actual.y);
+  const base = { miss, timing, strike, along: c.along, perp: c.perp, above: c.above };
   const at = Math.abs(timing);
   if (at > TIMING_FOUL)
     return timing < 0
-      ? { verdict: "early", title: "Way out in front: swing and a miss", points: 0, miss: d, timing, strike }
-      : { verdict: "late", title: "Late: swing and a miss", points: 0, miss: d, timing, strike };
-  const onTime = at <= TIMING_GOOD;
-  if (onTime && d <= 1.5 * IN) return { verdict: "barrel", title: "Barrelled it!", points: Math.round(100 * m), miss: d, timing, strike };
-  if (onTime && d <= 3 * IN) return { verdict: "solid", title: "Solid contact", points: Math.round(60 * m), miss: d, timing, strike };
-  if (d <= 5 * IN)
-    return { verdict: "foul", title: onTime ? "Foul tip" : timing < 0 ? "A bit early: foul ball" : "A bit late: foul ball", points: Math.round(20 * m), miss: d, timing, strike };
-  if (!strike) return { verdict: "chase", title: "Chased a ball", points: 0, miss: d, timing, strike };
-  return { verdict: "miss", title: "Swing and a miss", points: 0, miss: d, timing, strike };
+      ? { verdict: "early", title: "Way out in front: swing and a miss", points: 0, ...base }
+      : { verdict: "late", title: "Late: swing and a miss", points: 0, ...base };
+  if (!c.hit)
+    return strike ? { verdict: "miss", title: "Swing and a miss", points: 0, ...base } : { verdict: "chase", title: "Chased a ball", points: 0, ...base };
+  if (at > TIMING_GOOD) return { verdict: "foul", title: timing < 0 ? "A bit early: foul ball" : "A bit late: foul ball", points: Math.round(20 * m), ...base };
+  const alongIn = Math.abs(c.along) / IN;
+  const perpIn = c.perp / IN;
+  if (miss <= 1.5 * IN && perpIn <= 1.2) return { verdict: "barrel", title: "Barrelled it!", points: Math.round(100 * m), ...base };
+  if (alongIn <= 4 && perpIn <= 2) return { verdict: "solid", title: "Solid contact", points: Math.round(60 * m), ...base };
+  const kind =
+    perpIn > 2
+      ? c.above
+        ? "Got under it"
+        : "Topped it"
+      : c.along < 0
+        ? "Jammed: off the hands"
+        : "Off the end of the bat";
+  return { verdict: "weak", title: kind, points: Math.round(30 * m), ...base };
 }
 
 /** Hits keep a streak going; a take of a ball does not break it. */
 export const extendsStreak = (v: Verdict) => v === "barrel" || v === "solid";
-export const breaksStreak = (v: Verdict) => v === "miss" || v === "chase" || v === "calledStrike" || v === "foul" || v === "early" || v === "late";
+export const breaksStreak = (v: Verdict) => v === "miss" || v === "chase" || v === "calledStrike" || v === "foul" || v === "early" || v === "late" || v === "weak";
 
 // ------------------------------------------------------------------ batted ball
 
@@ -163,24 +289,33 @@ export interface Contact {
 const MPH = 0.44704;
 
 /**
- * How the ball comes off the bat. Quality sets exit speed; the vertical miss sets launch
- * (bat under the ball → higher, over it → lower); pitch location sets pull vs opposite
- * field (a right-handed batter pulls inside pitches, at −x, to left field). Foul tips go
- * into foul territory.
+ * How the ball comes off the bat. Quality sets exit speed; where the ball met the bat sets
+ * launch (bat under the ball → higher, over it → lower) and how hard; pitch location and
+ * timing set the direction (a right-hander pulls inside pitches and early swings to left
+ * field). Jammed balls die toward the opposite field, balls off the end slice that way too.
  */
-export function contactFrom(o: Outcome, actual: { x: number; y: number }, guess: { x: number; y: number }, rand: () => number = Math.random): Contact | null {
+export function contactFrom(o: Outcome, actual: { x: number; y: number }, rand: () => number = Math.random): Contact | null {
   const r = (a: number, b: number) => a + (b - a) * rand();
-  const under = (actual.y - guess.y) / 0.0254; // inches the bat passed under the ball
+  // Inches the bat's centreline passed under the ball (+) or over it (−).
+  const under = ((o.perp ?? 0) * (o.above ? 1 : -1)) / 0.0254;
+  const pull = actual.x * 95 + (o.timing ?? 0) * 600;
   if (o.verdict === "foul") {
-    const side = o.timing !== undefined && Math.abs(o.timing) > TIMING_GOOD ? Math.sign(o.timing) : guess.x - actual.x >= 0 ? 1 : -1;
+    const side = o.timing !== undefined && Math.abs(o.timing) > TIMING_GOOD ? Math.sign(o.timing) : (o.along ?? 0) >= 0 ? 1 : -1;
     return { speed: r(55, 75) * MPH, launch: r(25, 55), spray: side * r(52, 75), spin: r(25, 40) };
+  }
+  if (o.verdict === "weak") {
+    const along = o.along ?? 0;
+    const speed = r(58, 78) * MPH;
+    const launch = THREE.MathUtils.clamp(r(10, 22) + under * 12, -20, 75);
+    // Jammed and off-the-end contact both push the ball away from the pull side.
+    const spray = THREE.MathUtils.clamp(pull + (Math.abs(along) > 0.1 ? 22 : 0) + r(-12, 12), -50, 50);
+    return { speed, launch, spray, spin: r(20, 45) };
   }
   if (o.verdict !== "barrel" && o.verdict !== "solid") return null;
   const barrel = o.verdict === "barrel";
   const speed = (barrel ? r(100, 110) : r(86, 98)) * MPH;
   const launch = THREE.MathUtils.clamp((barrel ? r(22, 32) : r(6, 20)) + under * 6, -15, 70);
-  // Early bats pull the ball (to left field for a right-hander), late ones push it the other way.
-  const spray = THREE.MathUtils.clamp(actual.x * 95 + (o.timing ?? 0) * 600 + r(-10, 10), -42, 42);
+  const spray = THREE.MathUtils.clamp(pull + r(-10, 10), -42, 42);
   return { speed, launch, spray, spin: r(28, 42) };
 }
 
