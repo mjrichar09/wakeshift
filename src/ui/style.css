@@ -82,6 +82,9 @@ kbd { font: 500 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(-
 }
 .brand h1 { margin: 0; font: 700 27px/1 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; }
 .brand__tag { margin: 3px 0 0; font: 500 12.5px var(--font-body); color: var(--ink-2); }
+.brand__more { margin: 2px 0 0; font: 500 12px var(--font-body); color: var(--muted); }
+.brand__more a { color: var(--accent); text-decoration: none; }
+.brand__more a:hover, .brand__more a:focus-visible { text-decoration: underline; }
 .masthead__links { margin-left: auto; display: flex; gap: 6px; }
 .pill {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
