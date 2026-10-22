@@ -17,6 +17,49 @@ export const DIFFICULTY: Record<Difficulty, { label: string; speed: number; mult
 
 export const PITCHES_PER_ROUND = 10;
 
+/** Top scores kept on this device; the difficulty multiplier already evens out the levels. */
+export const HIGH_SCORES = 3;
+
+export interface HighScore {
+  initials: string;
+  score: number;
+  difficulty: Difficulty;
+}
+
+/** Up to three letters or digits, upper case. */
+export function cleanInitials(s: string) {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+}
+
+/** A round makes the list when it scores and beats the last place (or the list has room). */
+export function makesHighScores(list: HighScore[], score: number) {
+  return score > 0 && (list.length < HIGH_SCORES || score > list[list.length - 1].score);
+}
+
+/** The list with the new entry in place (ties go below earlier scores), and where it went. */
+export function addHighScore(list: HighScore[], e: HighScore): { list: HighScore[]; rank: number } {
+  const next = [...list];
+  let rank = next.findIndex((x) => e.score > x.score);
+  if (rank < 0) rank = next.length;
+  next.splice(rank, 0, e);
+  return { list: next.slice(0, HIGH_SCORES), rank: rank < HIGH_SCORES ? rank : -1 };
+}
+
+/** Stored JSON back to a list, dropping anything malformed. */
+export function parseHighScores(raw: string | null): HighScore[] {
+  try {
+    const v = JSON.parse(raw ?? "[]");
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter((x) => x && typeof x.score === "number" && typeof x.initials === "string" && x.difficulty in DIFFICULTY)
+      .map((x) => ({ initials: cleanInitials(x.initials) || "???", score: x.score, difficulty: x.difficulty as Difficulty }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, HIGH_SCORES);
+  } catch {
+    return [];
+  }
+}
+
 /** From the click to the bat reaching the plate, in game (sim) time: a real swing's ~0.1 s. */
 export const SWING_DELAY = 0.1;
 /** Timing windows on |bat arrival − ball arrival| (s, sim time). */

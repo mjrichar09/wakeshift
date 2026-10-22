@@ -496,6 +496,23 @@ kbd { font: 500 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(-
 .game__diff { margin: 6px 0 4px; }
 .game__actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .game__hint { font: 500 11.5px var(--font-mono); color: var(--muted); }
+.game__initials { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 4px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.game__initials[hidden] { display: none; }
+.game__initials label { flex: 1 1 100%; font: 600 13px var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); }
+.game__initials input {
+  width: 5.5ch; height: 34px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface);
+  font: 600 18px var(--font-mono); letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink);
+}
+.game__initials input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.game__hs-title { margin: 12px 0 4px !important; }
+.game__hs { margin: 0; padding: 0; list-style: none; counter-reset: hs; }
+.game__hs li { counter-increment: hs; display: grid; grid-template-columns: 1.6em 4ch 1fr auto; align-items: baseline; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.game__hs li::before { content: counter(hs); font: 600 13px var(--font-mono); color: var(--muted); }
+.game__hs li.is-new { color: var(--ink); font-weight: 600; }
+.game__hs b { font: 600 14px var(--font-mono); letter-spacing: 0.1em; color: var(--ink); }
+.game__hs .game__hs-score { font: 600 14px var(--font-mono); color: var(--accent); }
+.game__hs .game__hs-empty { display: block; color: var(--muted); }
+.game__hs .game__hs-empty::before { content: none; }
 .game__verdict { margin: 0 !important; font: 700 26px/1.05 var(--font-display) !important; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink) !important; }
 .game__verdict--barrel, .game__verdict--solid { color: var(--good) !important; }
 .game__verdict--foul, .game__verdict--weak { color: var(--warn) !important; }
