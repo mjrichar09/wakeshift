@@ -288,13 +288,15 @@ for (let k = 0; k < 7; k++) {
 }
 await p.keyboard.press("Space");
 for (let k = 0; k < 100 && (await p.evaluate(() => window.lab.game.state)) !== "summary"; k++) await p.waitForTimeout(50);
+// The list loads from /api/high-scores (absent under vite preview: this device's list instead).
+await waitPitch(() => document.querySelector('[data-g="hs"]').textContent !== "Loading…");
 const entry = await p.evaluate(() => ({ shown: !document.querySelector('[data-g="entry"]').hidden, focus: document.activeElement.id }));
 check("game: a scoring round offers the high-score entry", entry.shown && entry.focus === "game-initials", JSON.stringify(entry));
 await p.keyboard.type("k l");
 await p.keyboard.press("Enter");
-await p.waitForTimeout(200);
+await waitPitch(() => document.querySelector('[data-g="entry"]').hidden);
 const saved = await p.evaluate(() => ({ state: window.lab.game.state, list: document.querySelector('[data-g="hs"]').textContent, stored: localStorage.getItem("kl-high-scores") }));
-check("game: initials are saved to the high scores", saved.state === "summary" && saved.list.includes("KL") && saved.stored.includes('"KL"'), JSON.stringify(saved));
+check("game: initials are saved to the high scores", saved.state === "summary" && saved.list.includes("KL") && (saved.stored ?? "").includes('"KL"'), JSON.stringify(saved));
 await shot(p, `${out}/game-summary.png`);
 await p.keyboard.press("Escape");
 await p.waitForTimeout(500);

@@ -14,23 +14,21 @@ import type { Pose } from "../scene/cameras";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
-import type { BatLine, Difficulty, FlightCall, GamePitch, HighScore, Outcome } from "./batting";
+import type { BatLine, Difficulty, FlightCall, GamePitch, Outcome } from "./batting";
+import type { HighScore } from "./highScores";
+import { addHighScore, asHighScores, cleanInitials, makesHighScores, parseHighScores } from "./highScores";
 import {
   DIFFICULTY,
   LATE_WINDOW_MS,
   PITCHES_PER_ROUND,
   SWING_DELAY,
-  addHighScore,
   battedParams,
   breaksStreak,
   callFlight,
-  cleanInitials,
   batAtContact,
   contactFrom,
   crossing,
   extendsStreak,
-  makesHighScores,
-  parseHighScores,
   plateHit,
   randomPitch,
   score,
@@ -79,8 +77,10 @@ type State = "off" | "ready" | "countdown" | "pitching" | "result" | "summary";
 
 const IN = 39.37007874;
 const HS_KEY = "kl-high-scores";
+/** Shared high scores (Turso, via a Vercel function); this device's list when it can't be reached. */
+const HS_API = "/api/high-scores";
 /** After the hit lands, a beat on the landing before the camera returns behind the plate. */
-const RETURN_AFTER_LANDING_MS = 1600;
+const RETURN_AFTER_LANDING_MS = 1000;
 const MPH = 2.236936;
 
 export class BattingGame {
@@ -107,7 +107,9 @@ export class BattingGame {
   private flight: Flight | null = null;
   private cameraMoved = false;
   private returnTimer = 0;
-  private highScores: HighScore[] = loadHighScores();
+  private highScores: HighScore[] = loadLocalScores();
+  /** Whether the list shown is the shared one (false: this device only). */
+  private shared = false;
   /** Row of this round's entry in the high scores (-1: none yet). */
   private newRank = -1;
   private markers = new THREE.Group();
@@ -422,42 +424,78 @@ export class BattingGame {
     const pl = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
     this.el.finalNote.textContent = `${pl(this.hits, "hit", "hits")} (${barrels} barrelled) · ${pl(takes, "good take", "good takes")} · ${pl(chases, "chase", "chases")} · best streak ${this.best} · ${DIFFICULTY[this.difficulty].label}`;
     this.newRank = -1;
-    const entry = this.el.entry as HTMLFormElement;
-    entry.hidden = !makesHighScores(this.highScores, this.total);
-    this.paintHighScores();
+    (this.el.entry as HTMLFormElement).hidden = true;
+    (this.el.initials as HTMLInputElement).value = "";
+    this.el.hs.replaceChildren(listNote("Loading…"));
     this.show("summary");
     this.clearMarkers();
-    if (!entry.hidden) {
-      const i = this.el.initials as HTMLInputElement;
-      i.value = "";
-      i.focus();
+    const round = this.total;
+    void this.fetchHighScores().then(() => {
+      if (this.state !== "summary" || this.total !== round) return;
+      const entry = this.el.entry as HTMLFormElement;
+      entry.hidden = !makesHighScores(this.highScores, round);
+      this.paintHighScores();
+      if (!entry.hidden) (this.el.initials as HTMLInputElement).focus();
+    });
+  }
+
+  /** The shared list, or this device's when the server can't be reached. */
+  private async fetchHighScores() {
+    try {
+      const r = await fetch(HS_API, { cache: "no-store" });
+      if (!r.ok) throw new Error(`${r.status}`);
+      this.highScores = asHighScores((await r.json()).scores);
+      this.shared = true;
+    } catch {
+      this.highScores = loadLocalScores();
+      this.shared = false;
     }
   }
 
   private saveHighScore() {
     const initials = cleanInitials((this.el.initials as HTMLInputElement).value);
     if (!initials) return (this.el.initials as HTMLInputElement).focus();
-    const { list, rank } = addHighScore(this.highScores, { initials, score: this.total, difficulty: this.difficulty });
-    this.highScores = list;
-    this.newRank = rank;
+    const e: HighScore = { initials, score: this.total, difficulty: this.difficulty };
+    const form = this.el.entry as HTMLFormElement;
+    if (form.dataset.busy) return;
+    form.dataset.busy = "1";
+    void this.postHighScore(e).then(() => {
+      delete form.dataset.busy;
+      if (this.state !== "summary") return;
+      form.hidden = true;
+      this.paintHighScores();
+      (this.el.again as HTMLButtonElement).focus();
+    });
+  }
+
+  /** Send the score to the shared list; keep it on this device when that fails. */
+  private async postHighScore(e: HighScore) {
     try {
-      localStorage.setItem(HS_KEY, JSON.stringify(list));
+      const r = await fetch(HS_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(e) });
+      if (!r.ok) throw new Error(`${r.status}`);
+      const body = await r.json();
+      this.highScores = asHighScores(body.scores);
+      this.newRank = typeof body.rank === "number" ? body.rank : -1;
+      this.shared = true;
     } catch {
-      /* private mode: kept for this visit only */
+      const { list, rank } = addHighScore(loadLocalScores(), e);
+      this.highScores = list;
+      this.newRank = rank;
+      this.shared = false;
+      try {
+        localStorage.setItem(HS_KEY, JSON.stringify(list));
+      } catch {
+        /* private mode: kept for this visit only */
+      }
     }
-    this.el.entry.hidden = true;
-    this.paintHighScores();
-    (this.el.again as HTMLButtonElement).focus();
   }
 
   private paintHighScores() {
     const ol = this.el.hs;
     ol.replaceChildren();
+    this.el.hsTitle.textContent = this.shared ? "High scores" : "High scores · this device";
     if (!this.highScores.length) {
-      const li = document.createElement("li");
-      li.className = "game__hs-empty";
-      li.textContent = "None yet. Score some points to set one.";
-      ol.append(li);
+      ol.append(listNote("None yet. Score some points to set one."));
       return;
     }
     this.highScores.forEach((h, i) => {
@@ -538,7 +576,15 @@ export class BattingGame {
   }
 }
 
-function loadHighScores() {
+/** A plain line in the high-score list (loading, empty). */
+function listNote(text: string) {
+  const li = document.createElement("li");
+  li.className = "game__hs-empty";
+  li.textContent = text;
+  return li;
+}
+
+function loadLocalScores() {
   try {
     return parseHighScores(localStorage.getItem(HS_KEY));
   } catch {

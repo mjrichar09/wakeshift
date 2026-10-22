@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import type { HighScore } from "../../src/game/batting";
-import { addHighScore, batAtContact, cleanInitials, contactAlongBat, crossing, isStrike, makesHighScores, parseHighScores, plateHit, randomPitch, score } from "../../src/game/batting";
+import { DIFFICULTY, PITCHES_PER_ROUND, batAtContact, contactAlongBat, crossing, isStrike, plateHit, randomPitch, score } from "../../src/game/batting";
+import type { HighScore } from "../../src/game/highScores";
+import { DIFFICULTIES, MAX_SCORE, addHighScore, asHighScore, cleanInitials, makesHighScores, parseHighScores } from "../../src/game/highScores";
 import { BASEBALL_VIEWS } from "../../src/scene/cameras";
 import { arrival, simulate } from "../../src/physics/simulate";
 import { mulberry32 } from "../../src/physics/rng";
@@ -228,6 +229,14 @@ describe("high scores", () => {
     expect(a.list.map((x) => x.initials)).toEqual(["AAA", "BBB", "NEW"]);
     expect(addHighScore(list, { initials: "TOP", score: 900, difficulty: "easy" }).rank).toBe(0);
     expect(addHighScore(list, { initials: "LOW", score: 10, difficulty: "easy" }).rank).toBe(-1);
+  });
+
+  it("caps scores at a perfect round and knows every level", () => {
+    expect(MAX_SCORE).toBe(PITCHES_PER_ROUND * Math.round(100 * Math.max(...Object.values(DIFFICULTY).map((d) => d.mult))));
+    expect([...DIFFICULTIES].sort()).toEqual(Object.keys(DIFFICULTY).sort());
+    expect(asHighScore({ initials: "ab", score: MAX_SCORE + 1, difficulty: "hard" })).toBeNull();
+    expect(asHighScore({ initials: "!!", score: 10, difficulty: "hard" })).toBeNull();
+    expect(asHighScore({ initials: "ab", score: 10.5, difficulty: "hard" })).toBeNull();
   });
 
   it("cleans initials and survives bad storage", () => {
