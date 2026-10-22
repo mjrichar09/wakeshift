@@ -2,10 +2,13 @@
 // the browser never sees the database token.
 //   GET  /api/high-scores -> { scores: HighScore[] }  (the top 3)
 //   POST /api/high-scores { initials, score, difficulty } -> { scores, rank }
-// Env: TURSO_DATABASE_URL (libsql://…) and TURSO_AUTH_TOKEN.
+// Env: the URL (libsql://…) and token, as the Vercel Turso integration names them with the
+// "TursoDB" prefix, or unprefixed (TURSO_DATABASE_URL, TURSO_AUTH_TOKEN).
 
 import { createClient, type Client } from "@libsql/client";
 import { HIGH_SCORES, asHighScore, asHighScores } from "../src/game/highScores.js";
+
+const env = (...names: string[]) => names.map((n) => process.env[n]).find((v) => v);
 
 let db: Client | null = null;
 let ready: Promise<unknown> | null = null;
@@ -13,9 +16,9 @@ let ready: Promise<unknown> | null = null;
 /** The client, with the table created on first use. */
 async function client() {
   if (!db) {
-    const url = process.env.TURSO_DATABASE_URL;
-    if (!url) throw new Error("TURSO_DATABASE_URL is not set");
-    db = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+    const url = env("TURSODB_TURSO_DATABASE_URL", "TURSO_DATABASE_URL");
+    if (!url) throw new Error("TURSODB_TURSO_DATABASE_URL is not set");
+    db = createClient({ url, authToken: env("TURSODB_AUTH_TOKEN", "TURSODB_TURSO_AUTH_TOKEN", "TURSO_AUTH_TOKEN") });
     ready = db.batch(
       [
         `CREATE TABLE IF NOT EXISTS high_scores (

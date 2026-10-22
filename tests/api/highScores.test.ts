@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 // The function against a local libSQL file instead of Turso.
 const dir = mkdtempSync(join(tmpdir(), "hs-"));
-process.env.TURSO_DATABASE_URL = `file:${join(dir, "hs.db")}`;
+process.env.TURSODB_TURSO_DATABASE_URL = `file:${join(dir, "hs.db")}`;
 const { GET, POST } = await import("../../api/high-scores");
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
