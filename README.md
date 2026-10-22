@@ -121,3 +121,17 @@ All magnitudes are tunable starting defaults, exposed in the Aero model folder.
 ## Deploying
 
 `vercel.json` runs the tests, then `npm run build`, and serves `dist/`.
+
+## High scores (Turso)
+
+The batting game's top 3 live in a [Turso](https://turso.tech) database, behind the Vercel
+function `api/high-scores.ts` (the browser never sees the token). The Vercel Turso
+integration (prefix "TursoDB") sets its environment variables:
+
+- `TURSODB_TURSO_DATABASE_URL`: the database URL, `libsql://<db>-<org>.turso.io`
+- `TURSODB_TURSO_AUTH_TOKEN`: a token for it
+
+Unprefixed `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` work too.
+
+The table is created on first use. Without the function (e.g. `npm run dev`) the game keeps
+the list on the device instead.

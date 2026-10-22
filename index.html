@@ -104,6 +104,13 @@
             <p class="game__eyebrow">Round over</p>
             <h2>Score <span data-g="final"></span></h2>
             <p data-g="finalNote"></p>
+            <form class="game__initials" data-g="entry" hidden>
+              <label for="game-initials">New high score! Your initials</label>
+              <input id="game-initials" data-g="initials" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC" />
+              <button type="submit" class="btn">Save</button>
+            </form>
+            <p class="game__eyebrow game__hs-title" data-g="hsTitle">High scores</p>
+            <ol class="game__hs" data-g="hs"></ol>
             <div class="game__actions"><button type="button" class="btn" data-g="again">Play again</button><button type="button" class="btn btn--quiet" data-g="quit2">Back to the lab</button></div>
           </section>
         </div>

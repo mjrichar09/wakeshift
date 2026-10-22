@@ -231,6 +231,7 @@ await shot(p, `${out}/game-intro.png`);
 await p.click('[data-diff="easy"]');
 await p.click('[data-g="start"]');
 await waitPitch(() => window.lab.game.state === "pitching" && window.lab.playback.t > 0.05);
+const homeCam = await p.evaluate(() => window.lab.camera.position.toArray());
 // Pause just before the right moment (this harness renders slowly), set the clock exactly, click.
 let a = await aimAt();
 await p.evaluate(({ x, y }) => {
@@ -252,6 +253,12 @@ await p.waitForTimeout(5000);
 await shot(p, `${out}/game-landed.png`);
 const hitText = await p.evaluate(() => document.querySelector('[data-g="hit"]').textContent);
 console.log("INFO  batted ball:", hitText);
+// After the landing the camera returns behind the plate, to the path and the swing marker.
+await waitPitch(() => window.lab.game.flight?.landed);
+for (let k = 0; k < 60 && (await p.evaluate((h) => window.lab.camera.position.distanceTo({ x: h[0], y: h[1], z: h[2] }), homeCam)) > 0.01; k++) await p.waitForTimeout(250);
+const camBack = await p.evaluate((h) => window.lab.camera.position.distanceTo({ x: h[0], y: h[1], z: h[2] }), homeCam);
+check("game: camera returns behind the plate after the hit lands", camBack < 0.01, `${camBack.toFixed(3)} m off`);
+await shot(p, `${out}/game-returned.png`);
 
 await p.keyboard.press("Space");
 await p.waitForTimeout(100);
@@ -281,6 +288,15 @@ for (let k = 0; k < 7; k++) {
 }
 await p.keyboard.press("Space");
 for (let k = 0; k < 100 && (await p.evaluate(() => window.lab.game.state)) !== "summary"; k++) await p.waitForTimeout(50);
+// The list loads from /api/high-scores (absent under vite preview: this device's list instead).
+await waitPitch(() => document.querySelector('[data-g="hs"]').textContent !== "Loading…");
+const entry = await p.evaluate(() => ({ shown: !document.querySelector('[data-g="entry"]').hidden, focus: document.activeElement.id }));
+check("game: a scoring round offers the high-score entry", entry.shown && entry.focus === "game-initials", JSON.stringify(entry));
+await p.keyboard.type("k l");
+await p.keyboard.press("Enter");
+await waitPitch(() => document.querySelector('[data-g="entry"]').hidden);
+const saved = await p.evaluate(() => ({ state: window.lab.game.state, list: document.querySelector('[data-g="hs"]').textContent, stored: localStorage.getItem("kl-high-scores") }));
+check("game: initials are saved to the high scores", saved.state === "summary" && saved.list.includes("KL") && (saved.stored ?? "").includes('"KL"'), JSON.stringify(saved));
 await shot(p, `${out}/game-summary.png`);
 await p.keyboard.press("Escape");
 await p.waitForTimeout(500);

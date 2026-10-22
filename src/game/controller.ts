@@ -15,6 +15,8 @@ import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import type { BatLine, Difficulty, FlightCall, GamePitch, Outcome } from "./batting";
+import type { HighScore } from "./highScores";
+import { addHighScore, asHighScores, cleanInitials, makesHighScores, parseHighScores } from "./highScores";
 import {
   DIFFICULTY,
   LATE_WINDOW_MS,
@@ -74,6 +76,11 @@ interface Flight {
 type State = "off" | "ready" | "countdown" | "pitching" | "result" | "summary";
 
 const IN = 39.37007874;
+const HS_KEY = "kl-high-scores";
+/** Shared high scores (Turso, via a Vercel function); this device's list when it can't be reached. */
+const HS_API = "/api/high-scores";
+/** After the hit lands, a beat on the landing before the camera returns behind the plate. */
+const RETURN_AFTER_LANDING_MS = 1000;
 const MPH = 2.236936;
 
 export class BattingGame {
@@ -99,6 +106,12 @@ export class BattingGame {
   private endWall = 0;
   private flight: Flight | null = null;
   private cameraMoved = false;
+  private returnTimer = 0;
+  private highScores: HighScore[] = loadLocalScores();
+  /** Whether the list shown is the shared one (false: this device only). */
+  private shared = false;
+  /** Row of this round's entry in the high scores (-1: none yet). */
+  private newRank = -1;
   private markers = new THREE.Group();
   private root: HTMLElement;
   private el: Record<string, HTMLElement> = {};
@@ -118,6 +131,14 @@ export class BattingGame {
     this.el.again.addEventListener("click", () => this.startRound());
     this.el.quit.addEventListener("click", () => this.exit());
     this.el.quit2.addEventListener("click", () => this.exit());
+    this.el.entry.addEventListener("submit", (e) => {
+      e.preventDefault();
+      this.saveHighScore();
+    });
+    this.el.initials.addEventListener("input", () => {
+      const i = this.el.initials as HTMLInputElement;
+      i.value = cleanInitials(i.value);
+    });
     // A swing: the first press on the stage while the pitch is in the air.
     api.canvas.addEventListener(
       "pointerdown",
@@ -165,6 +186,11 @@ export class BattingGame {
   /** Keyboard: Space / Enter starts or advances. Returns true when handled. */
   key(e: KeyboardEvent): boolean {
     if (!this.active) return false;
+    // Typing initials: let the field have the keys (Enter submits the form).
+    if (e.target === this.el.initials) {
+      if (e.key === "Escape") (this.el.initials as HTMLInputElement).blur();
+      return true;
+    }
     if (e.key === "Escape") {
       this.exit();
       return true;
@@ -317,10 +343,18 @@ export class BattingGame {
       tag.position.set(rec.r[3 * i], 4, rec.r[3 * i + 2]);
       f.group.add(mark, tag);
       this.flash(`${f.call.title} ${f.call.feet} ft`, 2200);
+      // Then back behind the plate, where the pitch's path and the swing marker are.
+      clearTimeout(this.returnTimer);
+      this.returnTimer = window.setTimeout(() => {
+        if (this.flight !== f || !this.cameraMoved) return;
+        this.api.catcherView();
+        this.cameraMoved = false;
+      }, RETURN_AFTER_LANDING_MS);
     }
   }
 
   private endFlight() {
+    clearTimeout(this.returnTimer);
     const f = this.flight;
     if (!f) return;
     this.api.scene.remove(f.group);
@@ -389,8 +423,94 @@ export class BattingGame {
     this.el.final.textContent = `${this.total}`;
     const pl = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
     this.el.finalNote.textContent = `${pl(this.hits, "hit", "hits")} (${barrels} barrelled) · ${pl(takes, "good take", "good takes")} · ${pl(chases, "chase", "chases")} · best streak ${this.best} · ${DIFFICULTY[this.difficulty].label}`;
+    this.newRank = -1;
+    (this.el.entry as HTMLFormElement).hidden = true;
+    (this.el.initials as HTMLInputElement).value = "";
+    this.el.hs.replaceChildren(listNote("Loading…"));
     this.show("summary");
     this.clearMarkers();
+    const round = this.total;
+    void this.fetchHighScores().then(() => {
+      if (this.state !== "summary" || this.total !== round) return;
+      const entry = this.el.entry as HTMLFormElement;
+      entry.hidden = !makesHighScores(this.highScores, round);
+      this.paintHighScores();
+      if (!entry.hidden) (this.el.initials as HTMLInputElement).focus();
+    });
+  }
+
+  /** The shared list, or this device's when the server can't be reached. */
+  private async fetchHighScores() {
+    try {
+      const r = await fetch(HS_API, { cache: "no-store" });
+      if (!r.ok) throw new Error(`${r.status}`);
+      this.highScores = asHighScores((await r.json()).scores);
+      this.shared = true;
+    } catch {
+      this.highScores = loadLocalScores();
+      this.shared = false;
+    }
+  }
+
+  private saveHighScore() {
+    const initials = cleanInitials((this.el.initials as HTMLInputElement).value);
+    if (!initials) return (this.el.initials as HTMLInputElement).focus();
+    const e: HighScore = { initials, score: this.total, difficulty: this.difficulty };
+    const form = this.el.entry as HTMLFormElement;
+    if (form.dataset.busy) return;
+    form.dataset.busy = "1";
+    void this.postHighScore(e).then(() => {
+      delete form.dataset.busy;
+      if (this.state !== "summary") return;
+      form.hidden = true;
+      this.paintHighScores();
+      (this.el.again as HTMLButtonElement).focus();
+    });
+  }
+
+  /** Send the score to the shared list; keep it on this device when that fails. */
+  private async postHighScore(e: HighScore) {
+    try {
+      const r = await fetch(HS_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(e) });
+      if (!r.ok) throw new Error(`${r.status}`);
+      const body = await r.json();
+      this.highScores = asHighScores(body.scores);
+      this.newRank = typeof body.rank === "number" ? body.rank : -1;
+      this.shared = true;
+    } catch {
+      const { list, rank } = addHighScore(loadLocalScores(), e);
+      this.highScores = list;
+      this.newRank = rank;
+      this.shared = false;
+      try {
+        localStorage.setItem(HS_KEY, JSON.stringify(list));
+      } catch {
+        /* private mode: kept for this visit only */
+      }
+    }
+  }
+
+  private paintHighScores() {
+    const ol = this.el.hs;
+    ol.replaceChildren();
+    this.el.hsTitle.textContent = this.shared ? "High scores" : "High scores · this device";
+    if (!this.highScores.length) {
+      ol.append(listNote("None yet. Score some points to set one."));
+      return;
+    }
+    this.highScores.forEach((h, i) => {
+      const li = document.createElement("li");
+      li.classList.toggle("is-new", i === this.newRank);
+      const name = document.createElement("b");
+      name.textContent = h.initials;
+      const level = document.createElement("span");
+      level.textContent = DIFFICULTY[h.difficulty].label;
+      const pts = document.createElement("span");
+      pts.className = "game__hs-score";
+      pts.textContent = `${h.score}`;
+      li.append(name, level, pts);
+      ol.append(li);
+    });
   }
 
   // ------------------------------------------------------------- display
@@ -453,6 +573,22 @@ export class BattingGame {
       line.renderOrder = 10;
       this.markers.add(line);
     }
+  }
+}
+
+/** A plain line in the high-score list (loading, empty). */
+function listNote(text: string) {
+  const li = document.createElement("li");
+  li.className = "game__hs-empty";
+  li.textContent = text;
+  return li;
+}
+
+function loadLocalScores() {
+  try {
+    return parseHighScores(localStorage.getItem(HS_KEY));
+  } catch {
+    return [];
   }
 }
 

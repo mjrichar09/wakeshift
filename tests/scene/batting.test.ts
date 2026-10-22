@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { batAtContact, contactAlongBat, crossing, isStrike, plateHit, randomPitch, score } from "../../src/game/batting";
+import { DIFFICULTY, PITCHES_PER_ROUND, batAtContact, contactAlongBat, crossing, isStrike, plateHit, randomPitch, score } from "../../src/game/batting";
+import type { HighScore } from "../../src/game/highScores";
+import { DIFFICULTIES, MAX_SCORE, addHighScore, asHighScore, cleanInitials, makesHighScores, parseHighScores } from "../../src/game/highScores";
 import { BASEBALL_VIEWS } from "../../src/scene/cameras";
 import { arrival, simulate } from "../../src/physics/simulate";
 import { mulberry32 } from "../../src/physics/rng";
@@ -204,5 +206,44 @@ describe("batted ball", () => {
       expect(under.launch).toBeGreaterThan(40);
     }
     expect(contactFrom({ verdict: "miss", title: "", points: 0, strike: true }, actual)).toBeNull();
+  });
+});
+
+describe("high scores", () => {
+  const list: HighScore[] = [
+    { initials: "AAA", score: 500, difficulty: "hard" },
+    { initials: "BBB", score: 300, difficulty: "medium" },
+    { initials: "CCC", score: 200, difficulty: "easy" },
+  ];
+
+  it("lets a round in when it beats last place or the list has room", () => {
+    expect(makesHighScores(list, 201)).toBe(true);
+    expect(makesHighScores(list, 200)).toBe(false);
+    expect(makesHighScores(list.slice(0, 2), 10)).toBe(true);
+    expect(makesHighScores([], 0)).toBe(false);
+  });
+
+  it("slots a score in, keeps three, and puts ties below", () => {
+    const a = addHighScore(list, { initials: "NEW", score: 300, difficulty: "easy" });
+    expect(a.rank).toBe(2);
+    expect(a.list.map((x) => x.initials)).toEqual(["AAA", "BBB", "NEW"]);
+    expect(addHighScore(list, { initials: "TOP", score: 900, difficulty: "easy" }).rank).toBe(0);
+    expect(addHighScore(list, { initials: "LOW", score: 10, difficulty: "easy" }).rank).toBe(-1);
+  });
+
+  it("caps scores at a perfect round and knows every level", () => {
+    expect(MAX_SCORE).toBe(PITCHES_PER_ROUND * Math.round(100 * Math.max(...Object.values(DIFFICULTY).map((d) => d.mult))));
+    expect([...DIFFICULTIES].sort()).toEqual(Object.keys(DIFFICULTY).sort());
+    expect(asHighScore({ initials: "ab", score: MAX_SCORE + 1, difficulty: "hard" })).toBeNull();
+    expect(asHighScore({ initials: "!!", score: 10, difficulty: "hard" })).toBeNull();
+    expect(asHighScore({ initials: "ab", score: 10.5, difficulty: "hard" })).toBeNull();
+  });
+
+  it("cleans initials and survives bad storage", () => {
+    expect(cleanInitials("m.j-r!x")).toBe("MJR");
+    expect(parseHighScores("not json")).toEqual([]);
+    expect(parseHighScores(JSON.stringify([{ initials: "ab", score: 50, difficulty: "easy" }, { score: "x" }, { initials: "z", score: 90, difficulty: "nope" }]))).toEqual([
+      { initials: "AB", score: 50, difficulty: "easy" },
+    ]);
   });
 });
