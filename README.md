@@ -129,7 +129,7 @@ function `api/high-scores.ts` (the browser never sees the token). The Vercel Tur
 integration (prefix "TursoDB") sets its environment variables:
 
 - `TURSODB_TURSO_DATABASE_URL`: the database URL, `libsql://<db>-<org>.turso.io`
-- `TURSODB_AUTH_TOKEN`: a token for it
+- `TURSODB_TURSO_AUTH_TOKEN`: a token for it
 
 Unprefixed `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` work too.
 

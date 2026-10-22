@@ -18,7 +18,7 @@ async function client() {
   if (!db) {
     const url = env("TURSODB_TURSO_DATABASE_URL", "TURSO_DATABASE_URL");
     if (!url) throw new Error("TURSODB_TURSO_DATABASE_URL is not set");
-    db = createClient({ url, authToken: env("TURSODB_AUTH_TOKEN", "TURSODB_TURSO_AUTH_TOKEN", "TURSO_AUTH_TOKEN") });
+    db = createClient({ url, authToken: env("TURSODB_TURSO_AUTH_TOKEN", "TURSO_AUTH_TOKEN") });
     ready = db.batch(
       [
         `CREATE TABLE IF NOT EXISTS high_scores (
