@@ -82,9 +82,16 @@ kbd { font: 500 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(-
 }
 .brand h1 { margin: 0; font: 700 27px/1 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; }
 .brand__tag { margin: 3px 0 0; font: 500 12.5px var(--font-body); color: var(--ink-2); }
-.brand__more { margin: 2px 0 0; font: 500 12px var(--font-body); color: var(--muted); }
-.brand__more a { color: var(--accent); text-decoration: none; }
-.brand__more a:hover, .brand__more a:focus-visible { text-decoration: underline; }
+/* Link to my other projects, with the MJR FX mark (its own orange, not the lab accent). */
+.mjrfx {
+  --mjrfx-accent: #ff5a36;
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 12px var(--font-body); color: var(--muted); text-decoration: none;
+}
+.mjrfx__logo { display: block; height: 12px; width: auto; color: var(--ink); flex: none; }
+.mjrfx:hover span, .mjrfx:focus-visible span { color: var(--ink); text-decoration: underline; }
+.brand__more { margin-top: 5px; }
+.about__more { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
 .masthead__links { margin-left: auto; display: flex; gap: 6px; }
 .pill {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
