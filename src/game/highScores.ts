@@ -4,8 +4,8 @@
 export const HIGH_SCORES = 3;
 export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 export type Level = (typeof DIFFICULTIES)[number];
-/** Ten pitches, all barrelled at real time (100 × 2.5): nothing above this is a real round. */
-export const MAX_SCORE = 2500;
+/** Ten pitches, all barrelled for home runs at real time (100 × 2.5 × 1.3): nothing above this is a real round. */
+export const MAX_SCORE = 3250;
 
 export interface HighScore {
   initials: string;

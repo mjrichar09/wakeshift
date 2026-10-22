@@ -29,6 +29,7 @@ import {
   contactFrom,
   crossing,
   extendsStreak,
+  homeRunBonus,
   plateHit,
   randomPitch,
   score,
@@ -373,7 +374,6 @@ export class BattingGame {
     const timing = this.guess ? this.swingT + SWING_DELAY - this.plate.t : 0;
     const out = score({ x: a[0], y: a[1] }, this.bat, this.difficulty, timing);
     this.log.push(out);
-    this.total += out.points;
     if (extendsStreak(out.verdict)) {
       this.streak++;
       this.hits++;
@@ -383,6 +383,9 @@ export class BattingGame {
     this.api.reveal(true);
     this.placeActual(a[0], a[1]);
     this.launch(out, { x: a[0], y: a[1] });
+    // A home run is worth 30 % more.
+    const bonus = this.flight?.call.kind === "homeRun" ? homeRunBonus(out.points) : 0;
+    this.total += out.points + bonus;
     // Result card.
     const ghost = this.api.ghostOf(this.pitch!.params);
     const gc = crossing(ghost.r, ghost.t, ghost.n, 0);
@@ -398,7 +401,7 @@ export class BattingGame {
         : "You didn't swing.";
     this.el.verdict.textContent = out.title;
     this.el.verdict.className = `game__verdict game__verdict--${out.verdict}`;
-    this.el.points.textContent = out.points ? `+${out.points}` : "0";
+    this.el.points.textContent = bonus ? `+${out.points + bonus} (home run bonus +${bonus})` : out.points ? `+${out.points}` : "0";
     this.el.pitch.textContent = `${this.pitch!.name} · ${speed.toFixed(0)} mph · ${where}${brk}`;
     this.el.swing.textContent = swing;
     const hit = this.flight?.call;

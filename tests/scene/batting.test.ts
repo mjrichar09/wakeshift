@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { DIFFICULTY, PITCHES_PER_ROUND, batAtContact, contactAlongBat, crossing, isStrike, plateHit, randomPitch, score } from "../../src/game/batting";
+import { DIFFICULTY, PITCHES_PER_ROUND, batAtContact, homeRunBonus, contactAlongBat, crossing, isStrike, plateHit, randomPitch, score } from "../../src/game/batting";
 import type { HighScore } from "../../src/game/highScores";
 import { DIFFICULTIES, MAX_SCORE, addHighScore, asHighScore, cleanInitials, makesHighScores, parseHighScores } from "../../src/game/highScores";
 import { BASEBALL_VIEWS } from "../../src/scene/cameras";
@@ -150,7 +150,8 @@ describe("random pitches", () => {
       if (isStrike(a[0], a[1])) strikes++;
       if (p.knuckle) knuckles++;
     }
-    expect(strikes).toBeGreaterThan(12);
+    // About 31 % balls (AIM_SPREAD): over 40 pitches, roughly 28 strikes.
+    expect(strikes).toBeGreaterThan(20);
     expect(strikes).toBeLessThan(38);
     expect(knuckles).toBeGreaterThan(10);
   });
@@ -231,8 +232,15 @@ describe("high scores", () => {
     expect(addHighScore(list, { initials: "LOW", score: 10, difficulty: "easy" }).rank).toBe(-1);
   });
 
+  it("adds 30 % for a home run", () => {
+    expect(homeRunBonus(100)).toBe(30);
+    expect(homeRunBonus(250)).toBe(75);
+    expect(homeRunBonus(0)).toBe(0);
+  });
+
   it("caps scores at a perfect round and knows every level", () => {
-    expect(MAX_SCORE).toBe(PITCHES_PER_ROUND * Math.round(100 * Math.max(...Object.values(DIFFICULTY).map((d) => d.mult))));
+    const barrel = Math.round(100 * Math.max(...Object.values(DIFFICULTY).map((d) => d.mult)));
+    expect(MAX_SCORE).toBe(PITCHES_PER_ROUND * (barrel + homeRunBonus(barrel)));
     expect([...DIFFICULTIES].sort()).toEqual(Object.keys(DIFFICULTY).sort());
     expect(asHighScore({ initials: "ab", score: MAX_SCORE + 1, difficulty: "hard" })).toBeNull();
     expect(asHighScore({ initials: "!!", score: 10, difficulty: "hard" })).toBeNull();
