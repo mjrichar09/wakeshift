@@ -2,6 +2,7 @@ import "./ui/style.css";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { inject } from "@vercel/analytics";
+import { injectSpeedInsights } from "@vercel/speed-insights";
 
 import type { Params, Sport } from "./physics/params";
 import { defaultParams, withPatch } from "./physics/params";
@@ -48,6 +49,7 @@ import { BattingGame } from "./game/controller";
 import { CHIP_TIPS } from "./ui/tips";
 
 inject();
+injectSpeedInsights();
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
