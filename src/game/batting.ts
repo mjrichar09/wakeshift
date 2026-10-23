@@ -50,6 +50,9 @@ const SPIN: [string, string][] = [
   ["splitter", "Splitter"],
 ];
 
+/** Aim jitter scale: tuned so about 31 % of pitches are balls (was 39 % at 1). */
+export const AIM_SPREAD = 0.8;
+
 /**
  * A random pitch: about half knuckleballs with a random seam orientation (their break is
  * unpredictable), the rest spin pitches. Aim jitter spreads locations over and around the
@@ -61,7 +64,7 @@ export function randomPitch(rand: () => number = Math.random): GamePitch {
   const base = presetParams("baseball", id);
   const j = (deg: number) => (rand() * 2 - 1) * deg;
   const patch = {
-    release: { vAngleDeg: base.release.vAngleDeg + j(0.9), hAngleDeg: base.release.hAngleDeg + j(1.1) },
+    release: { vAngleDeg: base.release.vAngleDeg + j(0.9 * AIM_SPREAD), hAngleDeg: base.release.hAngleDeg + j(1.1 * AIM_SPREAD) },
     sim: { recordSectors: false, targetZ: MITT_Z },
     ...(knuckle ? { orientation: { yawDeg: j(180), pitchDeg: j(180), rollDeg: j(180) } } : {}),
   };
@@ -268,6 +271,10 @@ export function score(actual: { x: number; y: number }, bat: BatLine | null, dif
         : "Off the end of the bat";
   return { verdict: "weak", title: kind, points: Math.round(30 * m), ...base };
 }
+
+/** A home run adds this share of the hit's points. */
+export const HOME_RUN_BONUS = 0.3;
+export const homeRunBonus = (points: number) => Math.round(points * HOME_RUN_BONUS);
 
 /** Hits keep a streak going; a take of a ball does not break it. */
 export const extendsStreak = (v: Verdict) => v === "barrel" || v === "solid";
