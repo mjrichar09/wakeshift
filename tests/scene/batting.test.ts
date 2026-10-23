@@ -255,3 +255,14 @@ describe("high scores", () => {
     ]);
   });
 });
+
+describe("foul balls", () => {
+  it("score 45 at Easy, scaled by difficulty like the rest", () => {
+    const at = { x: 0, y: 0.8 };
+    const bat = batAtContact(at);
+    const pts = (d: "easy" | "medium" | "hard") => score(at, bat, d, 0.03);
+    expect(pts("easy")).toMatchObject({ verdict: "foul", points: 45 });
+    expect(pts("medium").points).toBe(68);
+    expect(pts("hard").points).toBe(113);
+  });
+});

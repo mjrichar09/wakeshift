@@ -93,7 +93,11 @@ export class BattingGame {
   /** The bat at contact for this swing: its sweet spot is on the click when reachable. */
   private bat: BatLine | null = null;
   private swingT = 0;
+  /** Pitches that count toward the round (a taken ball doesn't). */
   private n = 0;
+  /** Extra pitches earned this round, and whether the next pitch is one. */
+  private free = 0;
+  private freeNext = false;
   private total = 0;
   private streak = 0;
   private best = 0;
@@ -209,6 +213,8 @@ export class BattingGame {
 
   private startRound() {
     this.n = 0;
+    this.free = 0;
+    this.freeNext = false;
     this.total = 0;
     this.streak = 0;
     this.best = 0;
@@ -218,7 +224,7 @@ export class BattingGame {
   }
 
   private advance() {
-    if (this.n >= PITCHES_PER_ROUND) this.summary();
+    if (this.n >= PITCHES_PER_ROUND && !this.freeNext) this.summary();
     else this.nextPitch();
   }
 
@@ -230,7 +236,8 @@ export class BattingGame {
       this.api.catcherView();
       this.cameraMoved = false;
     }
-    this.n++;
+    if (!this.freeNext) this.n++;
+    this.freeNext = false;
     this.pitch = randomPitch();
     this.rec = this.api.load(this.pitch.params);
     const c = crossing(this.rec.r, this.rec.t, this.rec.n, 0)!;
@@ -376,6 +383,11 @@ export class BattingGame {
     const timing = this.guess ? this.swingT + SWING_DELAY - this.plate.t : 0;
     const out = score({ x: a[0], y: a[1] }, this.bat, this.difficulty, timing);
     this.log.push(out);
+    // Taking a ball earns an extra pitch: this one doesn't count toward the round.
+    if (out.verdict === "goodTake") {
+      this.free++;
+      this.freeNext = true;
+    }
     if (extendsStreak(out.verdict)) {
       this.streak++;
       this.hits++;
@@ -400,7 +412,9 @@ export class BattingGame {
     const swing =
       this.guess && out.miss !== undefined
         ? `Your bat was ${when}; the ball met it ${alongText(out)}. (On time: ±20 ms; ±40 ms for a foul.)${this.bat && !this.bat.reached ? " That click was out of reach." : ""}`
-        : "You didn't swing.";
+        : this.freeNext
+          ? "You didn't swing at a ball, so it doesn't count: you get an extra pitch."
+          : "You didn't swing.";
     this.el.verdict.textContent = out.title;
     this.el.verdict.className = `game__verdict game__verdict--${out.verdict}`;
     this.el.points.textContent = bonus ? `+${out.points + bonus} (home run bonus +${bonus})` : out.points ? `+${out.points}` : "0";
@@ -409,7 +423,7 @@ export class BattingGame {
     const hit = this.flight?.call;
     this.el.hit.hidden = !hit;
     if (hit) this.el.hit.textContent = hit.kind === "foul" ? `Foul ball into ${hit.field}.` : `${hit.title} ${hit.feet} ft to ${hit.field}.`;
-    this.el.next.textContent = this.n >= PITCHES_PER_ROUND ? "See your score" : "Next pitch";
+    this.el.next.textContent = this.freeNext ? "Extra pitch" : this.n >= PITCHES_PER_ROUND ? "See your score" : "Next pitch";
     this.show("result");
     this.paintScore();
   }
@@ -554,7 +568,7 @@ export class BattingGame {
   }
 
   private paintScore() {
-    this.el.count.textContent = `Pitch ${Math.max(this.n, 1)} of ${PITCHES_PER_ROUND}`;
+    this.el.count.textContent = `Pitch ${Math.max(this.n, 1)} of ${PITCHES_PER_ROUND}${this.free ? ` · +${this.free} extra` : ""}`;
     this.el.score.textContent = `${this.total}`;
     this.el.streak.textContent = `${this.streak}`;
   }
