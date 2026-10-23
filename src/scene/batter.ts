@@ -25,34 +25,34 @@ function material(color: number, roughness = 0.7, extra: THREE.MeshStandardMater
   return new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 }
 
-/** Capsule between two points, re-posed every frame. */
+/**
+ * A tapered tube between two points with a round cap at each end, re-posed every frame. Only
+ * the tube is stretched; the caps stay spheres, so where two limbs meet (knee, elbow) the
+ * joint is round and the radii match instead of stepping.
+ */
 class Limb {
-  readonly mesh: THREE.Mesh;
-  constructor(
-    private r: number,
-    mat: THREE.Material,
-    taper = 1,
-  ) {
-    const g = new THREE.CapsuleGeometry(r, 1, 6, 14);
-    if (taper !== 1) {
-      // Narrow the far end (y > 0) for forearms and shins.
-      const p = g.getAttribute("position");
-      for (let i = 0; i < p.count; i++) {
-        const k = 1 + (taper - 1) * clamp01((p.getY(i) + 0.5) / 1);
-        p.setX(i, p.getX(i) * k);
-        p.setZ(i, p.getZ(i) * k);
-      }
-      g.computeVertexNormals();
+  readonly mesh: THREE.Group;
+  private tube: THREE.Mesh;
+  private capA: THREE.Mesh;
+  private capB: THREE.Mesh;
+  constructor(r: number, mat: THREE.Material, taper = 1) {
+    // The far end (+y, toward b) narrows by `taper` for forearms and shins.
+    this.tube = new THREE.Mesh(new THREE.CylinderGeometry(r * taper, r, 1, 28, 1, true), mat);
+    this.capA = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 18), mat);
+    this.capB = new THREE.Mesh(new THREE.SphereGeometry(r * taper, 28, 18), mat);
+    this.mesh = new THREE.Group();
+    for (const m of [this.tube, this.capA, this.capB]) {
+      m.castShadow = true;
+      this.mesh.add(m);
     }
-    this.mesh = new THREE.Mesh(g, mat);
-    this.mesh.castShadow = true;
   }
   set(a: THREE.Vector3, b: THREE.Vector3) {
     const d = b.clone().sub(a);
-    const L = Math.max(d.length() - this.r * 0.6, 0.01);
-    this.mesh.scale.set(1, L, 1);
-    this.mesh.position.copy(a).add(b).multiplyScalar(0.5);
-    this.mesh.quaternion.setFromUnitVectors(Y, d.normalize());
+    this.tube.scale.set(1, Math.max(d.length(), 0.001), 1);
+    this.tube.position.copy(a).add(b).multiplyScalar(0.5);
+    this.tube.quaternion.setFromUnitVectors(Y, d.normalize());
+    this.capA.position.copy(a);
+    this.capB.position.copy(b);
   }
 }
 
@@ -200,7 +200,93 @@ function torsoGeometry() {
     new THREE.Vector2(0.06, 0.5),
     new THREE.Vector2(0.0, 0.5),
   ];
-  return new THREE.LatheGeometry(prof, 28);
+  return new THREE.LatheGeometry(prof, 48);
+}
+
+// Batting helmet, in the head's frame (face +z, left ear +x, which faces the pitcher for a
+// right-handed batter). Skull: about 0.092 × 0.105 × 0.1 m half-widths.
+
+/** Lower edge of the shell (y) by azimuth from the face: up at the brow, down over the ears and nape. */
+function shellEdge(az: number) {
+  const a = Math.abs(az); // 0 = face, π = back
+  const brow = 0.035;
+  const ear = -0.07;
+  const nape = -0.085;
+  if (a < 0.55) return brow;
+  if (a < 1.25) return brow + (ear - brow) * smooth((a - 0.55) / 0.7);
+  return ear + (nape - ear) * smooth((a - 1.25) / (Math.PI - 1.25));
+}
+
+/** The shell: an ellipsoid cut along shellEdge, open underneath (rendered double-sided). */
+function helmetShellGeometry() {
+  const R = { x: 0.118, y: 0.122, z: 0.13 };
+  const g = new THREE.SphereGeometry(1, 48, 32);
+  const p = g.getAttribute("position");
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i) * R.x;
+    let y = p.getY(i) * R.y;
+    let z = p.getZ(i) * R.z;
+    const cut = shellEdge(Math.atan2(x, z));
+    if (y < cut) {
+      // Pull it up onto the rim at the same azimuth: the rest of the sphere folds away.
+      const k = Math.sqrt(Math.max(0, 1 - (cut / R.y) ** 2));
+      const h = Math.hypot(x / R.x, z / R.z) || 1;
+      x = (x / h) * k;
+      z = (z / h) * k;
+      y = cut;
+    }
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** The bill: a short, flat crescent following the front of the shell. */
+function helmetBillGeometry() {
+  const shape = new THREE.Shape();
+  const n = 24;
+  // Outer edge (front of the bill) then inner edge (against the shell), x across, y forward.
+  for (let i = 0; i <= n; i++) {
+    const t = Math.PI * (i / n);
+    const x = -Math.cos(t) * 0.1;
+    const y = Math.sin(t) * 0.175;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  for (let i = n; i >= 0; i--) {
+    const t = Math.PI * (i / n);
+    shape.lineTo(-Math.cos(t) * 0.1, Math.sin(t) * 0.115);
+  }
+  const g = new THREE.ExtrudeGeometry(shape, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2, curveSegments: 24 });
+  g.rotateX(Math.PI / 2); // shape y → forward (+z), extrude down
+  return g;
+}
+
+/** The ear flap: covers the ear on the pitcher's side and runs forward toward the jaw, with an ear hole. */
+function helmetFlapGeometry() {
+  const s = new THREE.Shape();
+  // In (z forward, y up) on the side of the head.
+  s.moveTo(-0.055, -0.02);
+  s.lineTo(-0.058, -0.09);
+  s.quadraticCurveTo(-0.055, -0.122, -0.02, -0.126);
+  s.lineTo(0.03, -0.118);
+  s.quadraticCurveTo(0.075, -0.108, 0.078, -0.07);
+  s.lineTo(0.074, -0.025);
+  s.lineTo(0.05, -0.005);
+  s.lineTo(-0.055, -0.02);
+  const hole = new THREE.Path();
+  hole.absellipse(-0.005, -0.065, 0.014, 0.017, 0, Math.PI * 2, false, 0);
+  s.holes.push(hole);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2, curveSegments: 16 });
+  g.rotateY(-Math.PI / 2); // shape x → +z (forward), extrude toward −x (into the head)
+  // Bow it round the jaw: the front pulls in toward the face.
+  const p = g.getAttribute("position");
+  for (let i = 0; i < p.count; i++) {
+    const z = p.getZ(i);
+    p.setX(i, p.getX(i) - 0.35 * Math.max(0, z) ** 2 * 6);
+  }
+  g.computeVertexNormals();
+  return g;
 }
 
 export function swingingBatter(at: THREE.Vector3): SwingingBatter {
@@ -212,20 +298,20 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
   const skin = material(0xc79a7c, 0.55);
   const cleat = material(0x15181a, 0.45);
   const glove = material(0xe9ecee, 0.5);
-  const helmetMat = material(0x14284a, 0.22, { metalness: 0.15 });
+  const helmetMat = material(0x14284a, 0.22, { metalness: 0.15, side: THREE.DoubleSide });
   const ash = material(0xd6b685, 0.38);
 
   // Torso (turns with the shoulders) and pelvis (turns with the hips).
   const torso = new THREE.Mesh(torsoGeometry(), jersey);
   torso.scale.set(1, 1, 0.7);
   torso.castShadow = true;
-  const pelvis = new THREE.Mesh(new THREE.CapsuleGeometry(0.115, 0.16, 6, 14), pants);
+  const pelvis = new THREE.Mesh(new THREE.CapsuleGeometry(0.115, 0.16, 14, 36), pants);
   pelvis.rotation.z = Math.PI / 2;
   pelvis.scale.set(1, 1, 0.85);
   pelvis.castShadow = true;
   const pelvisG = new THREE.Group();
   pelvisG.add(pelvis);
-  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.018, 8, 28), navy);
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.018, 10, 48), navy);
   belt.rotation.x = Math.PI / 2;
   belt.scale.set(1, 0.72, 1);
   belt.position.y = 0.07;
@@ -240,24 +326,28 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
   const skull = new THREE.Mesh(new THREE.SphereGeometry(0.1, 24, 18), skin);
   skull.scale.set(0.92, 1.05, 1);
   skull.castShadow = true;
-  // Helmet: shell, brim to the front, ear flap on the side facing the pitcher (+x).
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.118, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.56), helmetMat);
-  shell.position.y = 0.015;
+  // Helmet: a shell down over the ears and nape, a short bill, and the ear flap on the side
+  // facing the pitcher (+x, the left ear of a right-handed batter).
+  const shell = new THREE.Mesh(helmetShellGeometry(), helmetMat);
+  shell.position.y = 0.012;
   shell.castShadow = true;
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.012, 24, 1, false, -Math.PI / 2, Math.PI), helmetMat);
-  brim.position.set(0, 0.012, 0.09);
-  brim.rotation.x = 0.12;
-  const flap = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10, -0.5, 1.1, Math.PI * 0.4, Math.PI * 0.32), helmetMat);
-  flap.rotation.y = Math.PI / 2;
-  flap.position.y = 0.0;
-  head.add(skull, shell, brim, flap);
+  const bill = new THREE.Mesh(helmetBillGeometry(), helmetMat);
+  // Tipped down a little about its back edge, which sits on the shell's rim at the brow.
+  bill.rotation.x = 0.18;
+  bill.position.set(0, 0.012 + 0.035 + 0.115 * Math.sin(0.18) + 0.004, 0);
+  bill.castShadow = true;
+  const flap = new THREE.Mesh(helmetFlapGeometry(), helmetMat);
+  flap.position.set(0.108, 0.012, 0);
+  flap.castShadow = true;
+  head.add(skull, shell, bill, flap);
   g.add(torso, pelvisG, neck.mesh, head);
 
   // Legs: thigh and calf in pants, stockings, cleats.
   const legs = [0, 1].map(() => ({
     thigh: new Limb(0.078, pants, 0.82),
     calf: new Limb(0.062, pants, 0.78),
-    sock: new Limb(0.048, navy, 0.85),
+    // A touch wider than the calf's end, so its cap covers the pants' (equal caps z-fight).
+    sock: new Limb(0.051, navy, 0.83),
     foot: new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.16, 4, 10), cleat),
   }));
   for (const l of legs) {
@@ -280,6 +370,13 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
     a.hand.castShadow = true;
     g.add(a.upper.mesh, a.fore.mesh, a.hand);
   }
+  // Rounded jersey shoulders that blend the torso into the arms.
+  const delts = [0, 1].map(() => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.058, 20, 14), jersey);
+    m.castShadow = true;
+    g.add(m);
+    return m;
+  });
   const bat = new THREE.Mesh(batGeometry(), ash);
   bat.castShadow = true;
   bat.name = "bat";
@@ -400,6 +497,7 @@ export function swingingBatter(at: THREE.Vector3): SwingingBatter {
       [shL, handL],
       [shR, handR],
     ].forEach(([sh, hand], i) => {
+      delts[i].position.copy(sh).lerp(shoulderC, 0.28);
       const ik = solveIK(sh, hand, UPPER_ARM, FOREARM, poles[i]);
       arms[i].upper.set(sh, ik.mid);
       arms[i].fore.set(ik.mid, ik.end);

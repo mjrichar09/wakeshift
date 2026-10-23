@@ -59,7 +59,9 @@ export class Tour {
     document.getElementById("tour-back")!.addEventListener("click", () => this.go(this.i - 1));
     document.getElementById("tour-close")!.addEventListener("click", () => this.close());
   }
-  start() {
+  /** Start the tour, optionally with another set of steps (each sport has its own). */
+  start(steps: TourStep[] = this.steps) {
+    this.steps = steps;
     this.el.hidden = false;
     this.el.closest(".stage")?.classList.add("is-touring");
     this.go(0);

@@ -41,6 +41,7 @@ import { drawSpray, runSpray } from "./ui/spray";
 import type { SprayOptions } from "./ui/spray";
 import type { SprayResult } from "./workers/spray.worker";
 import { ABOUT_HTML, Tour } from "./ui/about";
+import type { TourStep } from "./ui/about";
 import { ICONS } from "./ui/icons";
 import { tip } from "./ui/tip";
 import { BattingGame } from "./game/controller";
@@ -263,14 +264,15 @@ function queueResim() {
 function renderPresets() {
   const nav = $("presets");
   const list = presetsFor(params.sport);
+  // One labelled segment per group (in order of first appearance); the rows wrap, no scrolling.
+  const groups = [...new Set(list.map((p) => p.group))];
   let html = "";
-  let group = "";
-  for (const p of list) {
-    if (p.group !== group) {
-      group = p.group;
-      html += `<span class="preset-group">${group}</span>`;
-    }
-    html += `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === presetId}">${p.label}</button>`;
+  for (const g of groups) {
+    const buttons = list
+      .filter((p) => p.group === g)
+      .map((p) => `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === presetId}">${p.short}</button>`)
+      .join("");
+    html += `<div class="preset-group" role="group" aria-label="${g}"><span class="preset-group__label">${g}</span><div class="preset-group__btns">${buttons}</div></div>`;
   }
   if (presetId === "custom") html += `<span class="preset preset--custom">Custom</span>`;
   nav.innerHTML = html;
@@ -719,7 +721,7 @@ $("about-body").innerHTML = ABOUT_HTML;
 $("about-open").addEventListener("click", () => $<HTMLDialogElement>("about").showModal());
 $("keys-open").addEventListener("click", () => $<HTMLDialogElement>("keys").showModal());
 const peakSeamTime = () => landmarks(rec).find((l) => l.kind === "peak")?.t ?? 0.1;
-const tour = new Tour([
+const BASEBALL_TOUR: TourStep[] = [
   {
     title: "A quarter turn on the way in",
     body: "This knuckleball turns only <b>1/4 of a rotation</b> before it reaches the plate. The glowing tracer is brightest where the sideways push is strongest; the dashed white line is the same pitch with the seam force switched off. The caption at the bottom narrates what the air is doing.",
@@ -765,7 +767,7 @@ const tour = new Tour([
   },
   {
     title: "Measure the break, then compare",
-    body: "Back at the catcher's view, the markers at the plate show the break the seams caused (also in the readout and the charts). The close-up in the corner keeps the forces in view. Press <b>P</b> to pin this run, then choose <b>1/2 turn</b> or <b>Too much spin</b> to see the dance shrink as the spin averages it out.",
+    body: "Back at the catcher's view, the markers at the plate show the break the seams caused (also in the readout and the charts). The close-up in the corner keeps the forces in view. Press <b>P</b> to pin this run, then choose <b>1/2 turn</b> or <b>2+ turns</b> to see the dance shrink as the spin averages it out.",
     enter: () => {
       $("drawer").classList.remove("is-collapsed");
       display.pip = true;
@@ -776,8 +778,72 @@ const tour = new Tour([
       cards.refresh();
     },
   },
-]);
-$("tour-open").addEventListener("click", () => tour.start());
+];
+const crisisTime = () => landmarks(rec).find((l) => l.kind === "crisis")?.t ?? rec.t[rec.n - 1] * 0.6;
+const VOLLEYBALL_TOUR: TourStep[] = [
+  {
+    title: "The float serve",
+    body: "A standing float serve in still air, seen from the passer. It barely spins, so nothing evens out the air on either side. The glowing tracer is brightest where the sideways push is strongest. The dashed white line is the same serve with the panel force switched off.",
+    enter: () => {
+      if (params.sport !== "volleyball" || presetId !== "still") loadParams(presetParams("volleyball", "still"), "still");
+      display.split = false;
+      resize();
+      playback.speed = 0.25;
+      syncSpeed();
+      playback.replay();
+      setView("passer");
+    },
+  },
+  {
+    title: "Grooves instead of seams",
+    body: "A volleyball has no raised seams, but the grooves between its panels do the same job: they <b>trip</b> the boundary layer. The ring shows where the air lets go: <b style='color:var(--sep-lam)'>blue</b> = laminar (early), <b style='color:var(--sep-turb)'>orange</b> = tripped by a groove (late), <b style='color:var(--sep-pin)'>magenta</b> = pinned at a groove.",
+    enter: () => {
+      overlays.ring = true;
+      overlays.tripBand = true;
+      overlays.streamlines = true;
+      overlays.wake = true;
+      playback.playing = false;
+      playback.scrub(0.1);
+      setView("flowlab");
+    },
+  },
+  {
+    title: "The push",
+    body: "The side where the air clings longer pulls the wake the other way, so the ball is pushed toward the late side: the <b style='color:var(--f-seam)'>orange arrow</b>. This is the moment of strongest push. As the ball drifts slowly round, grooves move in and out of the trip zone and the push changes: the float.",
+    enter: () => {
+      playback.playing = false;
+      playback.scrub(peakSeamTime());
+    },
+  },
+  {
+    title: "Too fast to float (at first)",
+    body: "A hard jump float leaves the hand <b>above the drag crisis</b>: the air is turbulent all round, so there is little to trip and it flies true. Drag slows it, and once it drops into the crisis band (shaded in the <b>Re &amp; drag</b> chart) one side can go laminar again and it floats late, right in front of the passer.",
+    enter: () => {
+      loadParams(presetParams("volleyball", "fast"), "fast");
+      $("drawer").classList.remove("is-collapsed");
+      charts.select("re");
+      playback.playing = false;
+      playback.scrub(crisisTime());
+      setView("side");
+    },
+  },
+  {
+    title: "Wind and gusts",
+    body: "Outdoors, a beach crosswind and its gusts carry the slow-moving ball much farther than the panels push it. Press <b>P</b> to pin a run, then try <b>Slow</b> or <b>HVAC draft</b> and compare the dashed lines in the <b>Break vs ghost</b> chart.",
+    enter: () => {
+      loadParams(presetParams("volleyball", "beach"), "beach");
+      charts.select("gap");
+      playback.speed = 0.25;
+      syncSpeed();
+      playback.replay();
+      setView("overhead");
+      cards.refresh();
+    },
+  },
+];
+const tour = new Tour(BASEBALL_TOUR);
+// The tour button starts the tour for the sport on screen.
+$("tour-open").addEventListener("click", () => tour.start(params.sport === "volleyball" ? VOLLEYBALL_TOUR : BASEBALL_TOUR));
 
 // ---------------------------------------------------------------- frame loop
 const hud = new Hud($("hud"));
