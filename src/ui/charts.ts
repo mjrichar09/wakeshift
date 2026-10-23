@@ -11,6 +11,7 @@ import type { FlightRecord } from "../physics/simulate";
 import { crisisBand } from "../physics/aero/dragCurve";
 import type { UnitSystem } from "./units";
 import { smallUnit, toSmall } from "./units";
+import { tip } from "./tip";
 
 const STRIDE = 2;
 export type ChartId = "side" | "seam" | "re" | "gap";
@@ -18,15 +19,47 @@ export type ChartId = "side" | "seam" | "re" | "gap";
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 
+/** One line (or band) in the key: hover or focus it for what it shows and what it means. */
+interface LegendItem {
+  /** CSS color of the line. */
+  color: string;
+  dashed?: boolean;
+  /** A shaded band rather than a line. */
+  band?: boolean;
+  label: string;
+  title: string;
+  body: string;
+}
+
 interface Built {
   data: uPlot.AlignedData;
   series: uPlot.Series[];
   axes: uPlot.Axis[];
   scales: uPlot.Scales;
   plugins: uPlot.Plugin[];
-  note: string;
+  legend: LegendItem[];
   read: (i: number) => string;
 }
+
+/** What each tab plots, for the tab tooltips. */
+const TAB_TIPS: Record<ChartId, { title: string; body: string }> = {
+  side: {
+    title: "Side forces",
+    body: "The push the air puts on the ball other than drag, over the flight. This is what makes it move off a straight line. Hover a line in the key for what it means.",
+  },
+  seam: {
+    title: "Seam angle",
+    body: "How far the ball has turned since release. A knuckleball turns only a fraction of a rotation, so its seams (or panel grooves) sit in a few positions, and each one pushes differently.",
+  },
+  re: {
+    title: "Re & drag",
+    body: "The Reynolds number (how fast the air is relative to the ball's size) and the drag coefficient. In the shaded drag-crisis band the boundary layer can go either way, and that is where low-spin balls dance most.",
+  },
+  gap: {
+    title: "Break vs ghost",
+    body: "How far the ball has moved away from the ghost: the same throw with the seam (or panel) force switched off. This is the break the seams caused.",
+  },
+};
 
 export class Charts {
   private plot: uPlot | null = null;
@@ -39,7 +72,7 @@ export class Charts {
   /** Theme colors, read once per render (reading CSS in draw hooks is slow). */
   private col = { accent: "#f08a24", ink2: "#888", band: "rgba(0,0,0,0.1)" };
   private readoutEl: HTMLElement;
-  private noteEl: HTMLElement;
+  private keyEl: HTMLElement;
 
   constructor(
     private host: HTMLElement,
@@ -50,21 +83,28 @@ export class Charts {
         <button type="button" role="tab" data-chart="seam">Seam angle</button>
         <button type="button" role="tab" data-chart="re">Re &amp; drag</button>
         <button type="button" role="tab" data-chart="gap">Break vs ghost</button>
-        <span class="chart-note"></span><span class="chart-readout" aria-live="polite"></span>
+        <span class="chart-key" aria-label="What the lines show"></span><span class="chart-readout" aria-live="polite"></span>
       </div><div class="chart-body"></div>`;
     this.body = host.querySelector(".chart-body")!;
     this.readoutEl = host.querySelector(".chart-readout")!;
-    this.noteEl = host.querySelector(".chart-note")!;
-    host.querySelectorAll<HTMLButtonElement>("[data-chart]").forEach((b) =>
+    this.keyEl = host.querySelector(".chart-key")!;
+    host.querySelectorAll<HTMLButtonElement>("[data-chart]").forEach((b) => {
       b.addEventListener("click", () => {
         this.active = b.dataset.chart as ChartId;
         this.render();
-      }),
-    );
+      });
+      tip(b, TAB_TIPS[b.dataset.chart as ChartId]);
+    });
     new ResizeObserver(() => {
       const w = this.body.clientWidth;
       if (this.plot && w > 50) this.plot.setSize({ width: w, height: this.height });
     }).observe(this.body);
+  }
+
+  /** Switch to one of the charts (the tour uses it). */
+  select(id: ChartId) {
+    this.active = id;
+    this.render();
   }
 
   setCompact(compact: boolean) {
@@ -97,7 +137,7 @@ export class Charts {
     this.body.innerHTML = "";
     this.col = { accent: css("--accent"), ink2: css("--ink-2"), band: css("--chart-band") };
     const built = this.make(this.active);
-    this.noteEl.textContent = built.note;
+    this.renderKey(built.legend);
     const ink = css("--ink-2");
     const grid = css("--line");
     const width = Math.max(200, this.body.clientWidth);
@@ -128,6 +168,23 @@ export class Charts {
     );
     u.over.addEventListener("click", (e) => this.onScrub(u.posToVal(e.offsetX, "x") / 1000));
     this.plot = u;
+  }
+
+  /** The key: a swatch and a short name per line, each with a tooltip. */
+  private renderKey(items: LegendItem[]) {
+    this.keyEl.replaceChildren();
+    for (const it of items) {
+      const el = document.createElement("span");
+      el.className = "chart-key__item";
+      el.tabIndex = 0;
+      const sw = document.createElement("i");
+      sw.className = it.band ? "chart-key__band" : it.dashed ? "chart-key__line chart-key__line--dashed" : "chart-key__line";
+      sw.style.setProperty("--c", it.color);
+      el.append(sw, it.label);
+      const swatch = it.band ? it.color : it.dashed ? `repeating-linear-gradient(90deg, ${it.color} 0 5px, transparent 5px 8px)` : it.color;
+      tip(el, { title: it.title, body: it.body, key: [{ swatch, label: it.label }] });
+      this.keyEl.append(el);
+    }
   }
 
   private playheadPlugin(): uPlot.Plugin {
@@ -206,9 +263,37 @@ export class Charts {
         axes: [{ values: (_u, v) => v.map((x) => `${x.toFixed(2)} N`) }],
         scales: {},
         plugins: [zero],
-        note: withMagnus
-          ? `seam force: orange sideways (+ ${side}), blue vertical · Magnus: purple sideways, dashed vertical (+ up)`
-          : `orange: sideways (+ toward ${side}) · blue: vertical (+ up)`,
+        legend: [
+          {
+            color: colA,
+            label: "Seam, sideways",
+            title: `Seam force, sideways (+ toward ${side})`,
+            body: `The sideways push from the seams (or panel grooves) tripping the air on one side. Above zero it pushes toward ${side}, below zero the other way. When it crosses zero the push has flipped sides: the knuckleball's change of direction.`,
+          },
+          {
+            color: colB,
+            label: "Seam, vertical",
+            title: "Seam force, vertical (+ up)",
+            body: "The up/down part of the same seam push. Above zero it holds the ball up; below zero it pulls it down on top of gravity.",
+          },
+          ...(withMagnus
+            ? [
+                {
+                  color: purple,
+                  label: "Magnus, sideways",
+                  title: `Magnus force, sideways (+ toward ${side})`,
+                  body: "The push from spin: the spinning ball drags air round with it and is pushed toward the side where the surface moves with the air. For an ordinary spin pitch this, not the seams, is what makes it break.",
+                },
+                {
+                  color: purple,
+                  dashed: true,
+                  label: "Magnus, vertical",
+                  title: "Magnus force, vertical (+ up)",
+                  body: "The up/down part of the spin push. Backspin lifts (a fastball 'rises'); topspin pushes down (a curveball drops).",
+                },
+              ]
+            : []),
+        ],
         read: (k) =>
           `${ms(k)} · seam ${fx[k].toFixed(3)} / ${fy[k].toFixed(3)} N` + (withMagnus ? ` · Magnus ${mx[k].toFixed(2)} / ${my[k].toFixed(2)} N` : ""),
       };
@@ -221,7 +306,14 @@ export class Charts {
         axes: [{ values: (_u, v) => v.map((x) => `${Math.round(x)}°`) }],
         scales: {},
         plugins: [],
-        note: "degrees turned about the spin axis since release",
+        legend: [
+          {
+            color: colA,
+            label: "Seam angle",
+            title: "Seam angle",
+            body: "Degrees the ball has turned about its spin axis since release (360° is one full turn). A slow, steady climb is a knuckleball; the steeper it climbs, the more the seam pushes average out and the less it dances.",
+          },
+        ],
         read: (k) => `${ms(k)} · ${a[k].toFixed(0)}° (${(a[k] / 360).toFixed(2)} turns)`,
       };
     }
@@ -262,7 +354,27 @@ export class Charts {
           cd: { range: (_u, lo, hi) => [Math.max(0, lo - 0.05), hi + 0.05] },
         },
         plugins: [band],
-        note: "blue: Reynolds number (left) · orange: drag coefficient (right) · shaded: drag crisis",
+        legend: [
+          {
+            color: colB,
+            label: "Reynolds number",
+            title: "Reynolds number (left axis, thousands)",
+            body: "Air speed × ball size ÷ the air's viscosity: how 'fast' the flow is for this ball. It falls as drag slows the ball down. Where it sits decides whether the air over the ball stays smooth (laminar) or turns turbulent.",
+          },
+          {
+            color: colA,
+            label: "Drag coefficient",
+            title: "Drag coefficient, C_d (right axis)",
+            body: "How hard the air pulls back on the ball for its speed. It drops sharply in the drag crisis, where the turbulent air clings longer and the wake gets narrower.",
+          },
+          {
+            color: this.col.band,
+            band: true,
+            label: "Drag crisis",
+            title: "The drag-crisis band",
+            body: "The range of Reynolds numbers where the boundary layer can be laminar on one side and turbulent on the other. A seam or groove can tip either side, so this is where low-spin balls get the biggest, least predictable pushes.",
+          },
+        ],
         read: (k) => `${ms(k)} · Re ${re[k].toFixed(0)}k · C_d ${cd[k].toFixed(3)}`,
       };
     }
@@ -284,7 +396,27 @@ export class Charts {
       axes: [{ values: (_u, v) => v.map((x) => `${x.toFixed(1)} ${su}`) }],
       scales: {},
       plugins: [zero],
-      note: `orange: sideways (+ toward ${side}) · blue: up/down · dashed: pinned runs (sideways)`,
+      legend: [
+        {
+          color: colA,
+          label: "Sideways",
+          title: `Sideways break (+ toward ${side})`,
+          body: `How far the ball has moved sideways from the ghost (the same throw with no seam force). Its value at the end is the break the seams caused. Above zero is toward ${side}.`,
+        },
+        {
+          color: colB,
+          label: "Up/down",
+          title: "Vertical break (+ up)",
+          body: "How far the ball is above (+) or below (−) the ghost at each moment.",
+        },
+        ...pins.map((p) => ({
+          color: hex(p.color),
+          dashed: true,
+          label: p.label,
+          title: `Pinned run: ${p.label}`,
+          body: "The sideways break of a run you pinned (press P), against the current ghost, for comparison.",
+        })),
+      ],
       read: (k) => `${ms(k)} · sideways ${dx[k].toFixed(1)} ${su} · vertical ${dy[k].toFixed(1)} ${su}`,
     };
   }
