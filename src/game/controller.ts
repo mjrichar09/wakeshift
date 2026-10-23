@@ -172,6 +172,8 @@ export class BattingGame {
     this.show("intro");
     this.paintDifficulty();
     this.paintScore();
+    this.paintHighScores();
+    void this.fetchHighScores().then(() => this.active && this.paintHighScores());
   }
 
   exit() {
@@ -493,10 +495,26 @@ export class BattingGame {
     }
   }
 
+  /** The summary card's list and the corner board. */
   private paintHighScores() {
+    const title = this.shared ? "High scores" : "High scores · this device";
+    this.el.hsTitle.textContent = title;
+    this.el.boardTitle.textContent = title;
+    const board = this.el.boardList;
+    board.replaceChildren();
+    if (!this.highScores.length) board.append(listNote("None yet"));
+    this.highScores.forEach((h, i) => {
+      const li = document.createElement("li");
+      li.classList.toggle("is-new", i === this.newRank);
+      const name = document.createElement("b");
+      name.textContent = h.initials;
+      const pts = document.createElement("span");
+      pts.textContent = `${h.score}`;
+      li.append(name, pts);
+      board.append(li);
+    });
     const ol = this.el.hs;
     ol.replaceChildren();
-    this.el.hsTitle.textContent = this.shared ? "High scores" : "High scores · this device";
     if (!this.highScores.length) {
       ol.append(listNote("None yet. Score some points to set one."));
       return;
@@ -520,6 +538,8 @@ export class BattingGame {
 
   private show(panel: "intro" | "result" | "summary" | "none") {
     for (const p of ["intro", "result", "summary"]) this.el[p].hidden = p !== panel;
+    // The summary card has the full list.
+    this.el.board.hidden = panel === "summary";
   }
 
   private flash(text: string, ms = 700) {
