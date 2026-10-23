@@ -17,6 +17,7 @@
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "three": "^0.186.1",
     "uplot": "^1.6.32"
   },
