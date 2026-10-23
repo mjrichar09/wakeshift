@@ -282,12 +282,11 @@ await p.keyboard.press("Space");
 await waitResult();
 const v3 = await verdict();
 check("game: no swing is judged ball or strike", v3 === "Good eye: ball" || v3 === "Called strike", v3);
-for (let k = 0; k < 7; k++) {
+// Play out the round: taken balls earn extra pitches, so keep going until the summary.
+for (let k = 0; k < 40 && (await p.evaluate(() => window.lab.game.state)) !== "summary"; k++) {
   await p.keyboard.press("Space");
-  await waitResult();
+  for (let j = 0; j < 300 && !["result", "summary"].includes(await p.evaluate(() => window.lab.game.state)); j++) await p.waitForTimeout(50);
 }
-await p.keyboard.press("Space");
-for (let k = 0; k < 100 && (await p.evaluate(() => window.lab.game.state)) !== "summary"; k++) await p.waitForTimeout(50);
 // The list loads from /api/high-scores (absent under vite preview: this device's list instead).
 await waitPitch(() => document.querySelector('[data-g="hs"]').textContent !== "Loading…");
 const entry = await p.evaluate(() => ({ shown: !document.querySelector('[data-g="entry"]').hidden, focus: document.activeElement.id }));

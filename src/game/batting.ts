@@ -256,7 +256,7 @@ export function score(actual: { x: number; y: number }, bat: BatLine | null, dif
       : { verdict: "late", title: "Late: swing and a miss", points: 0, ...base };
   if (!c.hit)
     return strike ? { verdict: "miss", title: "Swing and a miss", points: 0, ...base } : { verdict: "chase", title: "Chased a ball", points: 0, ...base };
-  if (at > TIMING_GOOD) return { verdict: "foul", title: timing < 0 ? "A bit early: foul ball" : "A bit late: foul ball", points: Math.round(20 * m), ...base };
+  if (at > TIMING_GOOD) return { verdict: "foul", title: timing < 0 ? "A bit early: foul ball" : "A bit late: foul ball", points: Math.round(45 * m), ...base };
   const alongIn = Math.abs(c.along) / IN;
   const perpIn = c.perp / IN;
   if (miss <= 1.5 * IN && perpIn <= 1.2) return { verdict: "barrel", title: "Barrelled it!", points: Math.round(100 * m), ...base };
